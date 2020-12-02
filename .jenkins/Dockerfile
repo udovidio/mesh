@@ -1,5 +1,5 @@
 # This Dockerfile is used to build an image containing basic stuff to be used as a Jenkins slave build node.
-FROM jenkinsci/jnlp-slave:3.27-1
+FROM jenkins/inbound-agent:4.6-1-jdk11
 USER root
 
 # APT
@@ -36,16 +36,16 @@ RUN curl "https://get.docker.com/builds/`uname -s`/`uname -m`/docker-latest.tgz"
 # Install Java 8
 RUN mkdir -p /usr/lib/jvm/ && \
    cd /usr/lib/jvm/ && \
-   wget -nv -O jdk-8-x64.tar.gz "https://github.com/AdoptOpenJDK/openjdk8-binaries/releases/download/jdk8u265-b01/OpenJDK8U-jdk_x64_linux_hotspot_8u265b01.tar.gz" && \
+   wget -nv -O jdk-8-x64.tar.gz "https://github.com/AdoptOpenJDK/openjdk8-binaries/releases/download/jdk8u275-b01/OpenJDK8U-jdk_x64_linux_hotspot_8u275b01.tar.gz" && \
    tar xfz jdk-8-x64.tar.gz && \
    rm *.gz && \
-   mv java-1.8.0-openjdk-amd64 java-8
+   mv jdk8* java-8
 ENV JAVA_1_8_HOME /usr/lib/jvm/java-8
 
 # Install Java 11 (default)
 RUN mkdir -p /usr/lib/jvm/ && \
    cd /usr/lib/jvm/ && \
-   wget -nv -O openjdk-11.tar.gz "https://github.com/AdoptOpenJDK/openjdk11-binaries/releases/download/jdk-11.0.8%2B10/OpenJDK11U-jdk_x64_linux_hotspot_11.0.8_10.tar.gz" && \
+   wget -nv -O openjdk-11.tar.gz "https://github.com/AdoptOpenJDK/openjdk11-binaries/releases/download/jdk-11.0.9.1%2B1/OpenJDK11U-jdk_x64_linux_hotspot_11.0.9.1_1.tar.gz" && \
    tar xfz openjdk-11.tar.gz && \
    rm *.gz && \
    mv jdk-11* java-11
@@ -55,7 +55,7 @@ ENV JAVA_HOME /usr/lib/jvm/java-11
 # Install Java 15
 RUN mkdir -p /usr/lib/jvm/ && \
    cd /usr/lib/jvm/ && \
-   wget -nv -O openjdk-15.tar.gz "https://github.com/AdoptOpenJDK/openjdk15-binaries/releases/download/jdk-15%2B36/OpenJDK15U-jdk_x64_linux_hotspot_15_36.tar.gz" && \
+   wget -nv -O openjdk-15.tar.gz "https://github.com/AdoptOpenJDK/openjdk15-binaries/releases/download/jdk-15.0.1%2B9/OpenJDK15U-jdk_x64_linux_hotspot_15.0.1_9.tar.gz" && \
    tar xfz openjdk-15.tar.gz && \
    rm *.gz && \
    mv jdk-15* java-15
