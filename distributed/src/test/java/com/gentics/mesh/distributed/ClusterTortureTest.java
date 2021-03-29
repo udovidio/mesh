@@ -1,6 +1,5 @@
 package com.gentics.mesh.distributed;
 
-import static com.gentics.mesh.test.ClientHelper.call;
 import static com.gentics.mesh.util.TokenUtil.randomToken;
 import static com.gentics.mesh.util.UUIDUtil.randomUUID;
 
@@ -19,11 +18,8 @@ import com.gentics.mesh.core.rest.node.NodeResponse;
 import com.gentics.mesh.core.rest.project.ProjectCreateRequest;
 import com.gentics.mesh.core.rest.project.ProjectResponse;
 import com.gentics.mesh.core.rest.schema.SchemaListResponse;
-import com.gentics.mesh.core.rest.schema.impl.DateFieldSchemaImpl;
 import com.gentics.mesh.core.rest.schema.impl.SchemaResponse;
-import com.gentics.mesh.core.rest.schema.impl.SchemaUpdateRequest;
 import com.gentics.mesh.test.docker.MeshContainer;
-import com.gentics.mesh.test.docker.StartupLatchingConsumer.UnresponsiveContainerError;
 
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
@@ -45,57 +41,17 @@ public class ClusterTortureTest extends AbstractClusterTest {
 	private static String clusterPostFix = randomUUID();
 	
 	/**
-	 * Kill all nodes during sync process
-	 * 
-	 * @throws Exception
-	 */
-	// Ignored - the nodes never respond started after being killed. Bug?
-	// @Test
-	public void testAllKilled() throws Exception {
-		torture((serverA, serverB, contentSchema) -> {
-			String schemaUuid = contentSchema.getUuid();
-			
-			new Thread(() -> {
-					SchemaUpdateRequest schemaUpdateRequest = contentSchema.toUpdateRequest();
-					schemaUpdateRequest.removeField("teaser");
-					schemaUpdateRequest.addField(new DateFieldSchemaImpl().setName("teaser"), "content");
-					
-					call(() -> serverA.client().updateSchema(schemaUuid, schemaUpdateRequest));
-			}).run();
-			
-			Thread.sleep(5000);
-			
-			new Thread(() -> {
-					serverB.killHardContainer();
-					serverA.killHardContainer();
-			}).run();
-		});
-	}
-
-	/**
-	 * Kill the secondary node during the sync process.
+	 * Stop all nodes
 	 * 
 	 * @throws Exception
 	 */
 	@Test
-	public void testSecondaryKilledDuringMigration() throws Exception {		
-		torture((a, b, c) -> {
-			String schemaUuid = c.getUuid();
-			b.stop();
-			
-			MeshContainer serverB1 = prepareSlave("dockerCluster" + clusterPostFix, "nodeB", b.getDataPathPostfix(), false, false, 1);
-			serverB1.start();
-			
+	public void testAllStopped() throws Exception {
+		torture((serverA, serverB, contentSchema) -> {
 			new Thread(() -> {
-					SchemaUpdateRequest schemaUpdateRequest = c.toUpdateRequest();
-					schemaUpdateRequest.removeField("teaser");
-					schemaUpdateRequest.addField(new DateFieldSchemaImpl().setName("teaser"), "content");
-					
-					call(() -> a.client().updateSchema(schemaUuid, schemaUpdateRequest));
+					serverB.stop();
+					serverA.stop();
 			}).run();
-			
-			Thread.sleep(4000);
-			serverB1.killHardContainer();
 		});
 	}
 	
