@@ -261,7 +261,7 @@ public class MeshTestContext extends TestWatcher {
 
 	public void tearDownOnce(MeshTestSetting settings) throws Exception {
 		// TODO CI does not like this, reactivate later:
-		// mesh.shutdown();
+		mesh.shutdown();
 		removeConfigDirectory();
 		if (elasticsearch != null && elasticsearch.isRunning()) {
 			elasticsearch.stop();
@@ -274,7 +274,6 @@ public class MeshTestContext extends TestWatcher {
 			network.close();
 		}
 		optionChanger = noopConsumer();
-
 	}
 
 	private void removeConfigDirectory() throws IOException {
