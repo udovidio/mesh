@@ -49,7 +49,7 @@
 		</dependency>
 		<dependency>
 			<groupId>com.gentics.mesh</groupId>
-			<artifactId>mesh-core-tests</artifactId>
+			<artifactId>mesh-tests-context-api</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 	</dependencies>
