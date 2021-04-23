@@ -22,7 +22,7 @@ import io.vertx.core.Vertx;
  */
 @GraphElement
 public class MeshEdgeImpl extends AbstractEdgeFrame implements MeshEdge {
-
+	
 	@Override
 	protected void init() {
 		super.init();
@@ -49,21 +49,6 @@ public class MeshEdgeImpl extends AbstractEdgeFrame implements MeshEdge {
 	@Override
 	public FramedGraph getGraph() {
 		return Tx.get().getGraph();
-	}
-
-	@Override
-	public Edge getElement() {
-		// TODO FIXME We should store the element reference in a thread local map that is bound to the transaction. The references should be removed once the
-		// transaction finishes
-		Element edge = ((WrappedEdge) Tx.get().getGraph().getEdge(id())).getBaseElement();
-
-		// Element edge = threadLocalElement.get();
-
-		// Unwrap wrapped edge
-		if (edge instanceof WrappedElement) {
-			edge = (Edge) ((WrappedElement) edge).getBaseElement();
-		}
-		return (Edge) edge;
 	}
 
 	public MeshEdgeImpl getImpl() {

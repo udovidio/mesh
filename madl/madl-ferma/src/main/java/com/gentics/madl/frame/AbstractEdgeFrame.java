@@ -14,19 +14,27 @@ import com.tinkerpop.blueprints.util.wrappers.wrapped.WrappedElement;
 
 public abstract class AbstractEdgeFrame extends com.syncleus.ferma.AbstractEdgeFrame implements EdgeFrame {
 
+	private final ThreadLocal<Element> threadLocalElement = new ThreadLocal<>();
+
 	@Override
 	public Edge getElement() {
-		FramedGraph fg = Tx.get().getGraph();
-		if (fg == null) {
-			throw new RuntimeException(
-				"Could not find thread local graph. The code is most likely not being executed in the scope of a transaction.");
-		}
+		Element edge = threadLocalElement.get();
+		
+		if (edge == null) {
+			FramedGraph fg = Tx.get().getGraph();
+			if (fg == null) {
+				throw new RuntimeException(
+					"Could not find thread local graph. The code is most likely not being executed in the scope of a transaction.");
+			}
 
-		Edge edgeForId = fg.getEdge(id);
-		if (edgeForId == null) {
-			throw new RuntimeException("No edge for Id {" + id + "} of type {" + getClass().getName() + "} could be found within the graph");
+			Edge edgeForId = fg.getEdge(id);
+			if (edgeForId == null) {
+				throw new RuntimeException("No edge for Id {" + id + "} of type {" + getClass().getName() + "} could be found within the graph");
+			}
+			edge = ((WrappedEdge) edgeForId).getBaseElement();
+			
+			threadLocalElement.set(edge);
 		}
-		Element edge = ((WrappedEdge) edgeForId).getBaseElement();
 
 		// Unwrap wrapped vertex
 		if (edge instanceof WrappedElement) {
