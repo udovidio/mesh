@@ -20,8 +20,6 @@ import com.tinkerpop.blueprints.util.wrappers.wrapped.WrappedVertex;
 
 public abstract class AbstractVertexFrame extends com.syncleus.ferma.AbstractVertexFrame implements VertexFrame {
 
-	private final ThreadLocal<Element> threadLocalElement = new ThreadLocal<>();
-
 	/**
 	 * @deprecated Replaced by {@link #id()}
 	 */
@@ -33,23 +31,18 @@ public abstract class AbstractVertexFrame extends com.syncleus.ferma.AbstractVer
 
 	@Override
 	public Vertex getElement() {
-		Element vertex = threadLocalElement.get();
-		
-		if (vertex == null) {
-			FramedGraph fg = Tx.get().getGraph();
-			if (fg == null) {
-				throw new RuntimeException(
-					"Could not find thread local graph. The code is most likely not being executed in the scope of a transaction.");
-			}
-
-			Vertex vertexForId = fg.getVertex(id);
-			if (vertexForId == null) {
-				throw new RuntimeException("No vertex for Id {" + id + "} of type {" + getClass().getName() + "} could be found within the graph");
-			}
-			vertex = ((WrappedVertex) vertexForId).getBaseElement();
-			threadLocalElement.set(vertex);
+		FramedGraph fg = Tx.get().getGraph();
+		if (fg == null) {
+			throw new RuntimeException(
+				"Could not find thread local graph. The code is most likely not being executed in the scope of a transaction.");
 		}
 
+		Vertex vertexForId = fg.getVertex(id);
+		if (vertexForId == null) {
+			throw new RuntimeException("No vertex for Id {" + id + "} of type {" + getClass().getName() + "} could be found within the graph");
+		}
+		Element vertex = ((WrappedVertex) vertexForId).getBaseElement();
+		
 		// Unwrap wrapped vertex
 		if (vertex instanceof WrappedElement) {
 			vertex = (Vertex) ((WrappedElement) vertex).getBaseElement();
