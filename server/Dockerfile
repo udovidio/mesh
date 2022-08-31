@@ -1,4 +1,4 @@
-FROM adoptopenjdk/openjdk11:x86_64-alpine-jre-11.0.5_10
+FROM adoptopenjdk/openjdk11:x86_64-alpine-jdk-11.0.12_7
 
 ENV MESH_AUTH_KEYSTORE_PATH=/keystore/keystore.jks
 ENV MESH_GRAPH_BACKUP_DIRECTORY=/backups
@@ -39,4 +39,4 @@ VOLUME /keystore
 VOLUME /config
 
 CMD [ "java", "-Duser.dir=/mesh", "-jar" , "mesh.jar"]
-HEALTHCHECK --interval=10s --retries=1 CMD ["live.sh"]
+HEALTHCHECK --start-period=60s --interval=10s --retries=2 CMD ["sh", "live.sh"]

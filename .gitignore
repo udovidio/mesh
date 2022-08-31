@@ -35,6 +35,7 @@ orientdb-plugins
 keystore.jceks
 /bower_components/
 mesh.lock
+mesh.live
 /build
 /dist
 /node
@@ -55,3 +56,7 @@ build.sh
 debuginfo.log
 /.run
 /core/debuginfo
+mesh-mdm/config
+/config/
+/data/graphdb/storage/
+.vscode

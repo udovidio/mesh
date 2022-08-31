@@ -1,22 +1,23 @@
 package com.gentics.mesh.core.endpoint.admin.debuginfo.providers;
 
-import static com.gentics.mesh.core.data.util.HibClassConverter.toGraph;
-
-import java.util.function.Supplier;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
 import com.gentics.mesh.cli.BootstrapInitializer;
 import com.gentics.mesh.context.InternalActionContext;
-import com.gentics.mesh.core.data.MeshCoreVertex;
-import com.gentics.mesh.core.data.root.RootVertex;
+import com.gentics.mesh.core.data.HibCoreElement;
+import com.gentics.mesh.core.data.dao.DaoGlobal;
+import com.gentics.mesh.core.data.dao.DaoTransformable;
+import com.gentics.mesh.core.db.Database;
+import com.gentics.mesh.core.db.Tx;
 import com.gentics.mesh.core.endpoint.admin.debuginfo.DebugInfoBufferEntry;
 import com.gentics.mesh.core.endpoint.admin.debuginfo.DebugInfoEntry;
 import com.gentics.mesh.core.endpoint.admin.debuginfo.DebugInfoProvider;
 import com.gentics.mesh.core.rest.common.RestModel;
-import com.gentics.mesh.graphdb.spi.Database;
 import com.gentics.mesh.json.JsonUtil;
 
 import io.reactivex.Flowable;
@@ -27,12 +28,10 @@ import io.reactivex.Flowable;
 @Singleton
 public class EntitiesProvider implements DebugInfoProvider {
 
-	private final BootstrapInitializer boot;
 	private final Database db;
 
 	@Inject
 	public EntitiesProvider(BootstrapInitializer boot, Database db) {
-		this.boot = boot;
 		this.db = db;
 	}
 
@@ -41,13 +40,14 @@ public class EntitiesProvider implements DebugInfoProvider {
 		return "entities";
 	}
 
+	@SuppressWarnings("unchecked")
 	@Override
 	public Flowable<DebugInfoEntry> debugInfoEntries(InternalActionContext ac) {
 		return Flowable.mergeArray(
-			rootElements(ac, boot::jobRoot, "entities/jobs.json"),
-			rootElements(ac, boot::schemaContainerRoot, "entities/schemas.json"),
-			rootElements(ac, boot::microschemaContainerRoot, "entities/microschemas.json"),
-			rootElements(ac, boot::projectRoot, "entities/projects.json"),
+			rootElements(ac, tx -> tx.jobDao(), "entities/jobs.json"),
+			rootElements(ac, tx -> tx.schemaDao(), "entities/schemas.json"),
+			rootElements(ac, tx -> tx.microschemaDao(), "entities/microschemas.json"),
+			rootElements(ac, tx -> tx.projectDao(), "entities/projects.json"),
 			branches(ac)
 		);
 	}
@@ -56,20 +56,25 @@ public class EntitiesProvider implements DebugInfoProvider {
 		return db.singleTx(tx -> tx.projectDao().findAll().stream()
 			.map(project -> DebugInfoBufferEntry.fromString(
 				String.format("entities/branches/%s.json", project.getName()),
-				rootToString(ac, toGraph(project).getBranchRoot())
+				rootToString(ac, tx.branchDao().findAll(project).stream(), tx.branchDao())
 			)).collect(Collectors.toList()))
 			.flatMapPublisher(Flowable::fromIterable);
 	}
 
-	private <T extends MeshCoreVertex<? extends RestModel>> Flowable<DebugInfoEntry> rootElements(InternalActionContext ac, Supplier<RootVertex<T>> root, String filename) {
-		return db.singleTx(() -> rootToString(ac, root.get()))
+	private <
+			T extends HibCoreElement<? extends RestModel>, 
+			D extends DaoGlobal<T> & DaoTransformable<T, ? extends RestModel>
+		> Flowable<DebugInfoEntry> rootElements(
+				InternalActionContext ac, Function<Tx, D> root, String filename
+		) {
+		return db.singleTx(tx -> rootToString(ac, root.apply(tx).findAll().stream(), root.apply(tx)))
 			.map(elementList -> DebugInfoBufferEntry.fromString(filename, elementList))
 			.toFlowable();
 	}
-
-	private <T extends MeshCoreVertex<? extends RestModel>> String rootToString(InternalActionContext ac, RootVertex<T> root) {
-		return JsonUtil.toJson(root.findAll().stream()
-			.map(branch -> branch.transformToRestSync(ac, 0))
-			.collect(Collectors.toList()));
+	
+	private <T extends HibCoreElement<? extends RestModel>> String rootToString(InternalActionContext ac, Stream<? extends T> stream, DaoTransformable<T, ? extends RestModel> dao) {
+		return JsonUtil.toJson(
+			stream.map(element -> dao.transformToRestSync(element, ac, 0))
+				.collect(Collectors.toList()));
 	}
 }

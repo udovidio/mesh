@@ -4,10 +4,11 @@ import javax.inject.Inject;
 
 import com.gentics.mesh.changelog.highlevel.AbstractHighLevelChange;
 import com.gentics.mesh.cli.BootstrapInitializer;
-import com.gentics.mesh.core.data.Group;
-import com.gentics.mesh.core.data.Role;
-import com.gentics.mesh.core.data.dao.GroupDaoWrapper;
+import com.gentics.mesh.core.data.dao.GroupDao;
+import com.gentics.mesh.core.data.group.HibGroup;
+import com.gentics.mesh.core.data.role.HibRole;
 import com.gentics.mesh.core.data.user.HibUser;
+import com.gentics.mesh.core.db.Tx;
 import com.gentics.mesh.etc.config.MeshOptions;
 
 import dagger.Lazy;
@@ -21,11 +22,8 @@ public class SetAdminUserFlag extends AbstractHighLevelChange {
 
 	private static final Logger log = LoggerFactory.getLogger(SetAdminUserFlag.class);
 
-	private final Lazy<BootstrapInitializer> boot;
-
 	@Inject
 	public SetAdminUserFlag(Lazy<BootstrapInitializer> boot) {
-		this.boot = boot;
 	}
 
 	@Override
@@ -46,12 +44,12 @@ public class SetAdminUserFlag extends AbstractHighLevelChange {
 	@Override
 	public void apply() {
 		log.info("Applying change: " + getName());
-		GroupDaoWrapper groupDao = boot.get().groupDao();
-		for (Role role : boot.get().roleRoot().findAll()) {
+		GroupDao groupDao = Tx.get().groupDao();
+		for (HibRole role : Tx.get().roleDao().findAll()) {
 			if (!"admin".equals(role.getName())) {
 				continue;
 			}
-			for (Group group : role.getGroups()) {
+			for (HibGroup group : role.getGroups()) {
 				for (HibUser user : groupDao.getUsers(group)) {
 					log.info("Setting admin flag for user " + user.getUsername());
 					user.setAdmin(true);

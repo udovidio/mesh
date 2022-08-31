@@ -2,23 +2,22 @@ package com.gentics.mesh.search.index.role;
 
 import java.util.Collections;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
-import com.gentics.mesh.cli.BootstrapInitializer;
 import com.gentics.mesh.context.InternalActionContext;
-import com.gentics.mesh.core.data.Role;
 import com.gentics.mesh.core.data.role.HibRole;
-import com.gentics.mesh.core.data.search.UpdateDocumentEntry;
 import com.gentics.mesh.core.data.search.index.IndexInfo;
 import com.gentics.mesh.core.data.search.request.SearchRequest;
+import com.gentics.mesh.core.db.Database;
 import com.gentics.mesh.core.db.Tx;
 import com.gentics.mesh.etc.config.MeshOptions;
-import com.gentics.mesh.graphdb.spi.Database;
 import com.gentics.mesh.search.SearchProvider;
 import com.gentics.mesh.search.index.BucketManager;
 import com.gentics.mesh.search.index.MappingProvider;
@@ -41,9 +40,9 @@ public class RoleIndexHandlerImpl extends AbstractIndexHandler<HibRole>  impleme
 	RoleMappingProvider mappingProvider;
 
 	@Inject
-	public RoleIndexHandlerImpl(SearchProvider searchProvider, Database db, BootstrapInitializer boot, MeshHelper helper, MeshOptions options,
+	public RoleIndexHandlerImpl(SearchProvider searchProvider, Database db, MeshHelper helper, MeshOptions options,
 		SyncMetersFactory syncMetricsFactory, BucketManager bucketManager) {
-		super(searchProvider, db, boot, helper, options, syncMetricsFactory, bucketManager);
+		super(searchProvider, db, helper, options, syncMetricsFactory, bucketManager);
 	}
 
 	@Override
@@ -52,25 +51,15 @@ public class RoleIndexHandlerImpl extends AbstractIndexHandler<HibRole>  impleme
 	}
 
 	@Override
-	public Class<Role> getElementClass() {
-		return Role.class;
+	public Class<HibRole> getElementClass() {
+		return HibRole.class;
 	}
 
 	@Override
 	public long getTotalCountFromGraph() {
 		return db.tx(tx -> {
-			return tx.roleDao().globalCount();
+			return tx.roleDao().count();
 		});
-	}
-
-	@Override
-	protected String composeDocumentIdFromEntry(UpdateDocumentEntry entry) {
-		return Role.composeDocumentId(entry.getElementUuid());
-	}
-
-	@Override
-	protected String composeIndexNameFromEntry(UpdateDocumentEntry entry) {
-		return Role.composeIndexName();
 	}
 
 	@Override
@@ -85,29 +74,29 @@ public class RoleIndexHandlerImpl extends AbstractIndexHandler<HibRole>  impleme
 
 	@Override
 	public Map<String, IndexInfo> getIndices() {
-		String indexName = Role.composeIndexName();
+		String indexName = HibRole.composeIndexName();
 		IndexInfo info = new IndexInfo(indexName, null, getMappingProvider().getMapping(), "role");
 		return Collections.singletonMap(indexName, info);
 	}
 
 	@Override
-	public Flowable<SearchRequest> syncIndices() {
-		return diffAndSync(Role.composeIndexName(), null);
+	public Flowable<SearchRequest> syncIndices(Optional<Pattern> indexPattern) {
+		return diffAndSync(HibRole.composeIndexName(), null, indexPattern);
 	}
 
 	@Override
 	public Set<String> filterUnknownIndices(Set<String> indices) {
-		return filterIndicesByType(indices, Role.composeIndexName());
+		return filterIndicesByType(indices, HibRole.composeIndexName());
 	}
 
 	@Override
 	public Set<String> getIndicesForSearch(InternalActionContext ac) {
-		return Collections.singleton(Role.composeIndexName());
+		return Collections.singleton(HibRole.composeIndexName());
 	}
 
 	@Override
 	public Function<String, HibRole> elementLoader() {
-		return (uuid) -> boot.meshRoot().getRoleRoot().findByUuid(uuid);
+		return (uuid) -> Tx.get().roleDao().findByUuid(uuid);
 	}
 
 	@Override

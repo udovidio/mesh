@@ -4,38 +4,32 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
-import com.gentics.mesh.cli.BootstrapInitializer;
 import com.gentics.mesh.context.InternalActionContext;
-import com.gentics.mesh.core.data.Project;
-import com.gentics.mesh.core.data.Tag;
-import com.gentics.mesh.core.data.dao.ProjectDaoWrapper;
+import com.gentics.mesh.core.data.dao.ProjectDao;
 import com.gentics.mesh.core.data.project.HibProject;
-import com.gentics.mesh.core.data.root.ProjectRoot;
-import com.gentics.mesh.core.data.search.UpdateDocumentEntry;
-import com.gentics.mesh.core.data.search.bulk.IndexBulkEntry;
 import com.gentics.mesh.core.data.search.index.IndexInfo;
 import com.gentics.mesh.core.data.search.request.SearchRequest;
 import com.gentics.mesh.core.data.tag.HibTag;
+import com.gentics.mesh.core.db.Database;
 import com.gentics.mesh.core.db.Tx;
 import com.gentics.mesh.etc.config.MeshOptions;
-import com.gentics.mesh.graphdb.spi.Database;
 import com.gentics.mesh.search.SearchProvider;
 import com.gentics.mesh.search.index.BucketManager;
 import com.gentics.mesh.search.index.entry.AbstractIndexHandler;
 import com.gentics.mesh.search.index.metric.SyncMetersFactory;
 import com.gentics.mesh.search.verticle.eventhandler.MeshHelper;
 
-import io.reactivex.Completable;
 import io.reactivex.Flowable;
-import io.reactivex.Observable;
 
 /**
  * Handler for the tag specific search index.
@@ -55,9 +49,9 @@ public class TagIndexHandlerImpl extends AbstractIndexHandler<HibTag> implements
 	TagMappingProvider mappingProvider;
 
 	@Inject
-	public TagIndexHandlerImpl(SearchProvider searchProvider, Database db, BootstrapInitializer boot, MeshHelper helper, MeshOptions options,
+	public TagIndexHandlerImpl(SearchProvider searchProvider, Database db, MeshHelper helper, MeshOptions options,
 		SyncMetersFactory syncMetricsFactory, BucketManager bucketManager) {
-		super(searchProvider, db, boot, helper, options, syncMetricsFactory, bucketManager);
+		super(searchProvider, db, helper, options, syncMetricsFactory, bucketManager);
 	}
 
 	@Override
@@ -66,14 +60,14 @@ public class TagIndexHandlerImpl extends AbstractIndexHandler<HibTag> implements
 	}
 
 	@Override
-	public Class<Tag> getElementClass() {
-		return Tag.class;
+	public Class<HibTag> getElementClass() {
+		return HibTag.class;
 	}
 
 	@Override
 	public long getTotalCountFromGraph() {
 		return db.tx(tx -> {
-			return tx.tagDao().globalCount();
+			return tx.tagDao().count();
 		});
 	}
 
@@ -88,33 +82,10 @@ public class TagIndexHandlerImpl extends AbstractIndexHandler<HibTag> implements
 	}
 
 	@Override
-	protected String composeDocumentIdFromEntry(UpdateDocumentEntry entry) {
-		return Tag.composeDocumentId(entry.getElementUuid());
-	}
-
-	@Override
-	protected String composeIndexNameFromEntry(UpdateDocumentEntry entry) {
-		return Tag.composeIndexName(entry.getContext().getProjectUuid());
-	}
-
-	@Override
-	public Completable store(HibTag tag, UpdateDocumentEntry entry) {
-		entry.getContext().setProjectUuid(tag.getProject().getUuid());
-		return super.store(tag, entry);
-	}
-
-	@Override
-	public Observable<IndexBulkEntry> storeForBulk(HibTag tag, UpdateDocumentEntry entry) {
-		entry.getContext().setProjectUuid(tag.getProject().getUuid());
-		return super.storeForBulk(tag, entry);
-	}
-
-	@Override
 	public Map<String, IndexInfo> getIndices() {
-		return db.tx(() -> {
+		return db.tx(tx -> {
 			Map<String, IndexInfo> indexInfo = new HashMap<>();
-			ProjectRoot projectRoot = boot.meshRoot().getProjectRoot();
-			for (Project project : projectRoot.findAll()) {
+			for (HibProject project : tx.projectDao().findAll()) {
 				IndexInfo info = getIndex(project.getUuid());
 				indexInfo.put(info.getIndexName(), info);
 			}
@@ -129,16 +100,16 @@ public class TagIndexHandlerImpl extends AbstractIndexHandler<HibTag> implements
 	 * @return
 	 */
 	public IndexInfo getIndex(String projectUuid) {
-		return new IndexInfo(Tag.composeIndexName(projectUuid), null, getMappingProvider().getMapping(), "tag");
+		return new IndexInfo(HibTag.composeIndexName(projectUuid), null, getMappingProvider().getMapping(), "tag");
 	}
 
 	@Override
-	public Flowable<SearchRequest> syncIndices() {
-		return Flowable.defer(() -> db.tx(() -> {
-			return boot.meshRoot().getProjectRoot().findAll().stream()
+	public Flowable<SearchRequest> syncIndices(Optional<Pattern> indexPattern) {
+		return Flowable.defer(() -> db.tx(tx -> {
+			return tx.projectDao().findAll().stream()
 				.map(project -> {
 					String uuid = project.getUuid();
-					return diffAndSync(Tag.composeIndexName(uuid), uuid);
+					return diffAndSync(HibTag.composeIndexName(uuid), uuid, indexPattern);
 				}).collect(Collectors.collectingAndThen(Collectors.toList(), Flowable::merge));
 		}));
 	}
@@ -147,9 +118,9 @@ public class TagIndexHandlerImpl extends AbstractIndexHandler<HibTag> implements
 	public Set<String> filterUnknownIndices(Set<String> indices) {
 		return db.tx(tx -> {
 			Set<String> activeIndices = new HashSet<>();
-			ProjectDaoWrapper projectDao = tx.projectDao();
+			ProjectDao projectDao = tx.projectDao();
 			for (HibProject project : projectDao.findAll()) {
-				activeIndices.add(Tag.composeIndexName(project.getUuid()));
+				activeIndices.add(HibTag.composeIndexName(project.getUuid()));
 			}
 			return indices.stream()
 				.filter(i -> i.startsWith(getType() + "-"))
@@ -163,7 +134,7 @@ public class TagIndexHandlerImpl extends AbstractIndexHandler<HibTag> implements
 		return db.tx(tx -> {
 			HibProject project = tx.getProject(ac);
 			if (project != null) {
-				return Collections.singleton(Tag.composeIndexName(project.getUuid()));
+				return Collections.singleton(HibTag.composeIndexName(project.getUuid()));
 			} else {
 				return getIndices().keySet();
 			}
@@ -172,12 +143,12 @@ public class TagIndexHandlerImpl extends AbstractIndexHandler<HibTag> implements
 
 	@Override
 	public Function<String, HibTag> elementLoader() {
-		return uuid -> boot.meshRoot().getTagRoot().findByUuid(uuid);
+		return uuid -> Tx.get().tagDao().findByUuid(uuid);
 	}
 
 	@Override
 	public Stream<? extends HibTag> loadAllElements() {
-		return Tx.get().tagDao().findAllGlobal().stream();
+		return Tx.get().tagDao().findAll().stream();
 	}
 
 }

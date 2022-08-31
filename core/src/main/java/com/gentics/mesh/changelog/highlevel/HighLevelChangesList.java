@@ -7,8 +7,6 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 
 import com.gentics.mesh.changelog.highlevel.change.ExtractPlainText;
-import com.gentics.mesh.changelog.highlevel.change.FixNodeVersionOrder;
-import com.gentics.mesh.changelog.highlevel.change.RestructureWebrootIndex;
 import com.gentics.mesh.changelog.highlevel.change.SetAdminUserFlag;
 import com.gentics.mesh.core.data.changelog.HighLevelChange;
 
@@ -19,13 +17,7 @@ import com.gentics.mesh.core.data.changelog.HighLevelChange;
 public class HighLevelChangesList {
 
 	@Inject
-	public RestructureWebrootIndex restructureWebroot;
-
-	@Inject
 	public ExtractPlainText plainText;
-
-	@Inject
-	public FixNodeVersionOrder fixNodeVersionOrder;
 
 	@Inject
 	public SetAdminUserFlag setAdminUserFlag;
@@ -36,15 +28,13 @@ public class HighLevelChangesList {
 
 	public List<HighLevelChange> getList() {
 		return Arrays.asList(
-			restructureWebroot,
-			plainText,
-			fixNodeVersionOrder,
-			setAdminUserFlag
-		// ADD NEW CHANGES HERE!
-		// WARNING!
-		// Only add changes when absolutely needed. Try to avoid changelog entries since those would require a offline update.
-		// Instead it is recommended to write changes in a way so that those can be applied on the fly.
-		// WARNING!
+				plainText,
+				setAdminUserFlag
+				// ADD NEW CHANGES HERE!
+				// WARNING!
+				// Only add changes when absolutely needed. Try to avoid changelog entries since those would require a offline update.
+				// Instead it is recommended to write changes in a way so that those can be applied on the fly.
+				// WARNING!
 		);
 	}
 }

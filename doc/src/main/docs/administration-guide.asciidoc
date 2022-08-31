@@ -9,11 +9,11 @@ include::content/docs/variables.adoc-include[]
 [options="header"]
 |======
 | Component                                                    | Type                 | Version
-| https://orientdb.com/[OrientDB]                              | Graph Database       | 3.0.x
+| https://orientdb.com/[OrientDB]                              | Graph Database       | 3.1.x
 | https://github.com/Syncleus/Ferma[Ferma]                     | OGM                  | 2.4.x
 | https://www.elastic.co/products/elasticsearch[Elasticsearch] | Search Engine        | 6.1.x
-| http://vertx.io/[Vert.x]                                     | Core Framework       | 3.7.x
-| https://hazelcast.com/[Hazelcast]                            | In-Memory Data Grid  | 3.10.x
+| http://vertx.io/[Vert.x]                                     | Core Framework       | 3.9.x
+| https://hazelcast.com/[Hazelcast]                            | In-Memory Data Grid  | 3.12.x
 | https://google.github.io/dagger/[Dagger 2]                   | Dependency Injection | 2.11.x
 |======
 
@@ -44,6 +44,8 @@ docker run \
 ----
 
 === Volumes / Locations
+
+CAUTION: The `/graphdb` volume is irrelevant, if link:/premium-features/sql-db/#docs[SQL RDBMS storage premium feature] is used. Please refer to the feature documentation instead.
 
 [options="header"]
 |======
@@ -155,6 +157,13 @@ The underlying storage filesystem for the Graph Database must support DirectIO.
 
 Storage solutions which provide one of the supported filesystems by the means of iSCSI or Fiberchannel are supported.
 
+Gentics Mesh will periodically check the available disk space. If less disk space is available than defined as
+warn threshold, a warning will be logged. If less disk space is available than defined as read-only threshold,
+the Mesh instance (in cluster mode all Mesh instances) will be set read-only, so mutating requests will all fail
+with an appropriate message.
+
+The thresholds can be configured with the configuration settings `storage.diskQuota.warnThreshold` and `storage.diskQuota.readOnlyThreshold` either as percentage of the total disk space (e.g. `10%`) or as absolute disk space (e.g. `10M`). The check interval can be configured with `storage.diskQuota.checkInterval` (in ms). Setting this to `0` will disable the check.
+
 ==== Cluster Requirements
 
 * Each Gentics Mesh instance needs at least 1.5 GB heap memory.
@@ -247,6 +256,10 @@ include::content/docs/generated/tables/ClusterOptions.adoc-include[]
 By default all specified directories are relative to the installation directory.
 
 include::content/docs/generated/tables/GraphStorageOptions.adoc-include[]
+
+==== Disk Quota Check Options
+
+include::content/docs/generated/tables/DiskQuotaOptions.adoc-include[]
 
 ==== OrientDB parameters
 

@@ -1,6 +1,8 @@
 package com.gentics.mesh.graphql.type;
 
 import static com.gentics.mesh.core.data.perm.InternalPermission.READ_PERM;
+import static com.gentics.mesh.core.data.perm.InternalPermission.READ_PUBLISHED_PERM;
+import static com.gentics.mesh.core.rest.common.ContainerType.PUBLISHED;
 import static com.gentics.mesh.graphql.type.NodeTypeProvider.NODE_PAGE_TYPE_NAME;
 import static com.gentics.mesh.graphql.type.TagFamilyTypeProvider.TAG_FAMILY_TYPE_NAME;
 import static graphql.Scalars.GraphQLString;
@@ -13,9 +15,8 @@ import java.util.stream.Stream;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
-import com.gentics.mesh.core.data.Tag;
-import com.gentics.mesh.core.data.dao.ContentDaoWrapper;
-import com.gentics.mesh.core.data.dao.TagDaoWrapper;
+import com.gentics.mesh.core.data.dao.ContentDao;
+import com.gentics.mesh.core.data.dao.TagDao;
 import com.gentics.mesh.core.data.node.NodeContent;
 import com.gentics.mesh.core.data.tag.HibTag;
 import com.gentics.mesh.core.data.tagfamily.HibTagFamily;
@@ -73,20 +74,20 @@ public class TagTypeProvider extends AbstractTypeProvider {
 				.argument(createLanguageTagArg(true))
 				.argument(createNodeVersionArg())
 				.dataFetcher((env) -> {
-					ContentDaoWrapper contentDao = Tx.get().contentDao();
+					ContentDao contentDao = Tx.get().contentDao();
 					GraphQLContext gc = env.getContext();
-					Tag tag = env.getSource();
-					TagDaoWrapper tagDao = Tx.get().tagDao();
+					HibTag tag = env.getSource();
+					TagDao tagDao = Tx.get().tagDao();
 
 					List<String> languageTags = getLanguageArgument(env);
 					ContainerType type = getNodeVersion(env);
 
-					Stream<NodeContent> contents = tagDao.findTaggedNodes(tag, gc).stream()
+					Stream<NodeContent> contents = tagDao.findTaggedNodes(tag, gc, type == PUBLISHED ? READ_PUBLISHED_PERM : READ_PERM).stream()
 						// Now lets try to load the containers for those found nodes - apply the language fallback
 						.map(node -> new NodeContent(node, contentDao.findVersion(node, gc, languageTags, type), languageTags, type))
 						// Filter nodes without a container
 						.filter(content -> content.getContainer() != null)
-						.filter(gc::hasReadPerm);
+						.filter(content1 -> gc.hasReadPerm(content1, type));
 
 					return applyNodeFilter(env, contents);
 

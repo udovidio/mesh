@@ -8,13 +8,13 @@ import java.util.regex.PatternSyntaxException;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
+import com.gentics.mesh.core.db.Database;
 import com.gentics.mesh.core.rest.admin.cluster.ClusterConfigResponse;
 import com.gentics.mesh.core.rest.admin.cluster.ClusterServerConfig;
 import com.gentics.mesh.core.rest.admin.cluster.ServerRole;
 import com.gentics.mesh.etc.config.ClusterOptions;
 import com.gentics.mesh.etc.config.MeshOptions;
 import com.gentics.mesh.etc.config.cluster.CoordinationTopology;
-import com.gentics.mesh.graphdb.spi.Database;
 import com.hazelcast.core.Cluster;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.ILock;
@@ -325,9 +325,8 @@ public class MasterElector {
 	}
 
 	/**
-	 * Return the master server information.
-	 * 
-	 * @return
+	 * Get the server, which is currently the master, may be null
+	 * @return current master, may be null
 	 */
 	public MasterServer getMasterMember() {
 		if (masterMember == null) {

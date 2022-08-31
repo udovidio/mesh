@@ -17,10 +17,10 @@ import com.gentics.mesh.cli.BootstrapInitializer;
 import com.gentics.mesh.context.InternalActionContext;
 import com.gentics.mesh.core.data.user.HibUser;
 import com.gentics.mesh.core.data.user.MeshAuthUser;
+import com.gentics.mesh.core.db.Database;
 import com.gentics.mesh.core.rest.auth.TokenResponse;
 import com.gentics.mesh.etc.config.AuthenticationOptions;
 import com.gentics.mesh.etc.config.MeshOptions;
-import com.gentics.mesh.graphdb.spi.Database;
 import com.gentics.mesh.shared.SharedKeys;
 
 import io.vertx.core.AsyncResult;
@@ -31,11 +31,11 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.auth.AuthProvider;
+import io.vertx.ext.auth.JWTOptions;
 import io.vertx.ext.auth.KeyStoreOptions;
 import io.vertx.ext.auth.User;
 import io.vertx.ext.auth.jwt.JWTAuth;
 import io.vertx.ext.auth.jwt.JWTAuthOptions;
-import io.vertx.ext.jwt.JWTOptions;
 import io.vertx.ext.web.Cookie;
 
 /**
@@ -60,8 +60,6 @@ public class MeshJWTAuthProvider implements AuthProvider, JWTAuth {
 
 	private BCryptPasswordEncoder passwordEncoder;
 
-	private BootstrapInitializer boot;
-
 	private final MeshOptions meshOptions;
 
 	@Inject
@@ -70,7 +68,6 @@ public class MeshJWTAuthProvider implements AuthProvider, JWTAuth {
 		this.meshOptions = meshOptions;
 		this.passwordEncoder = passwordEncoder;
 		this.db = database;
-		this.boot = boot;
 
 		// Use the mesh JWT options in order to setup the JWTAuth provider
 		AuthenticationOptions options = meshOptions.getAuthenticationOptions();
@@ -84,7 +81,6 @@ public class MeshJWTAuthProvider implements AuthProvider, JWTAuth {
 		JWTAuthOptions config = new JWTAuthOptions();
 		config.setKeyStore(new KeyStoreOptions().setPath(keyStorePath).setPassword(keystorePassword).setType(type));
 		jwtProvider = JWTAuth.create(vertx, new JWTAuthOptions(config));
-
 	}
 
 	/**
@@ -160,7 +156,7 @@ public class MeshJWTAuthProvider implements AuthProvider, JWTAuth {
 	 *            Password
 	 */
 	private HibUser authenticate(String username, String password, String newPassword) {
-		HibUser user = db.tx(() -> boot.userDao().findByUsername(username));
+		HibUser user = db.tx(tx -> { return tx.userDao().findByUsername(username); });
 		if (user != null) {
 			String accountPasswordHash = db.tx(user::getPasswordHash);
 			// TODO check if user is enabled
@@ -184,7 +180,7 @@ public class MeshJWTAuthProvider implements AuthProvider, JWTAuth {
 					throw error(BAD_REQUEST, "auth_login_newpassword_failed");
 				} else {
 					if (forcedPasswordChange) {
-						db.tx(() -> boot.userDao().setPassword(user, newPassword));
+						db.tx(tx -> { return tx.userDao().setPassword(user, newPassword); });
 					}
 					return user;
 				}

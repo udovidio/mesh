@@ -1000,13 +1000,13 @@ public abstract class MeshRestHttpClientImpl extends AbstractMeshRestHttpClient 
 	}
 
 	@Override
-	public MeshRequest<GenericMessageResponse> invokeIndexClear() {
-		return prepareRequest(POST, "/search/clear", GenericMessageResponse.class);
+	public MeshRequest<GenericMessageResponse> invokeIndexClear(ParameterProvider... parameters) {
+		return prepareRequest(POST, "/search/clear" + getQuery(parameters), GenericMessageResponse.class);
 	}
 
 	@Override
-	public MeshRequest<GenericMessageResponse> invokeIndexSync() {
-		return prepareRequest(POST, "/search/sync", GenericMessageResponse.class);
+	public MeshRequest<GenericMessageResponse> invokeIndexSync(ParameterProvider... parameters) {
+		return prepareRequest(POST, "/search/sync" + getQuery(parameters), GenericMessageResponse.class);
 	}
 
 	@Override
@@ -1442,7 +1442,7 @@ public abstract class MeshRestHttpClientImpl extends AbstractMeshRestHttpClient 
 	}
 
 	@Override
-	public MeshRequest<JobListResponse> findJobs(PagingParameters... parameters) {
+	public MeshRequest<JobListResponse> findJobs(ParameterProvider... parameters) {
 		return prepareRequest(GET, "/admin/jobs" + getQuery(parameters), JobListResponse.class);
 	}
 
@@ -1529,6 +1529,11 @@ public abstract class MeshRestHttpClientImpl extends AbstractMeshRestHttpClient 
 	}
 
 	@Override
+	public MeshRequest<GenericMessageResponse> clearCache() {
+		return prepareRequest(DELETE, "/admin/cache", GenericMessageResponse.class);
+	}
+
+	@Override
 	public MeshRequest<EmptyResponse> ready() {
 		return prepareRequest(GET, "/health/ready", EmptyResponse.class);
 	}
@@ -1536,6 +1541,11 @@ public abstract class MeshRestHttpClientImpl extends AbstractMeshRestHttpClient 
 	@Override
 	public MeshRequest<EmptyResponse> live() {
 		return prepareRequest(GET, "/health/live", EmptyResponse.class);
+	}
+
+	@Override
+	public MeshRequest<EmptyResponse> writable() {
+		return prepareRequest(GET, "/health/writable", EmptyResponse.class);
 	}
 
 	@Override

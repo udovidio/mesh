@@ -1,9 +1,10 @@
 package com.gentics.mesh.demo;
 
-import com.gentics.mesh.core.data.User;
 import com.gentics.mesh.core.data.group.HibGroup;
 import com.gentics.mesh.core.data.role.HibRole;
 import com.gentics.mesh.core.data.user.HibUser;
+import com.gentics.mesh.core.db.CommonTx;
+import com.gentics.mesh.core.db.Tx;
 
 /**
  * Container for user, group, role and password references of an user.
@@ -35,7 +36,7 @@ public class UserInfo {
 		this.role = role;
 	}
 
-	public void setUser(User user) {
+	public void setUser(HibUser user) {
 		this.user = user;
 	}
 
@@ -44,6 +45,9 @@ public class UserInfo {
 	}
 
 	public HibGroup getGroup() {
+		Tx.maybeGet().ifPresent(tx -> {
+			group = tx.<CommonTx>unwrap().load(group.getId(), tx.<CommonTx>unwrap().groupDao().getPersistenceClass());
+		});
 		return group;
 	}
 
@@ -52,6 +56,9 @@ public class UserInfo {
 	}
 
 	public HibRole getRole() {
+		Tx.maybeGet().ifPresent(tx -> {
+			role = tx.<CommonTx>unwrap().load(role.getId(), tx.<CommonTx>unwrap().roleDao().getPersistenceClass());
+		});
 		return role;
 	}
 
@@ -60,6 +67,9 @@ public class UserInfo {
 	}
 
 	public HibUser getUser() {
+		Tx.maybeGet().ifPresent(tx -> {
+			user = tx.<CommonTx>unwrap().load(user.getId(), tx.<CommonTx>unwrap().userDao().getPersistenceClass());
+		});
 		return user;
 	}
 

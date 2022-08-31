@@ -3,6 +3,7 @@ package com.gentics.mesh.graphql.type;
 import static com.gentics.mesh.core.action.DAOActionContext.context;
 import static com.gentics.mesh.core.data.perm.InternalPermission.READ_PERM;
 import static com.gentics.mesh.core.data.perm.InternalPermission.READ_PUBLISHED_PERM;
+import static com.gentics.mesh.core.rest.common.ContainerType.PUBLISHED;
 import static graphql.Scalars.GraphQLLong;
 import static graphql.Scalars.GraphQLString;
 import static graphql.schema.GraphQLArgument.newArgument;
@@ -21,13 +22,13 @@ import java.util.stream.StreamSupport;
 
 import com.gentics.graphqlfilter.filter.StartFilter;
 import com.gentics.mesh.core.action.DAOActions;
-import com.gentics.mesh.core.data.GraphFieldContainer;
 import com.gentics.mesh.core.data.HibBaseElement;
 import com.gentics.mesh.core.data.HibCoreElement;
+import com.gentics.mesh.core.data.HibFieldContainer;
 import com.gentics.mesh.core.data.branch.HibBranch;
-import com.gentics.mesh.core.data.dao.ContentDaoWrapper;
-import com.gentics.mesh.core.data.dao.NodeDaoWrapper;
-import com.gentics.mesh.core.data.dao.UserDaoWrapper;
+import com.gentics.mesh.core.data.dao.ContentDao;
+import com.gentics.mesh.core.data.dao.NodeDao;
+import com.gentics.mesh.core.data.dao.UserDao;
 import com.gentics.mesh.core.data.node.NodeContent;
 import com.gentics.mesh.core.data.page.Page;
 import com.gentics.mesh.core.data.page.impl.DynamicStreamPageImpl;
@@ -128,7 +129,7 @@ public abstract class AbstractTypeProvider {
 	 * @param source
 	 * @return
 	 */
-	public List<String> getLanguageArgument(DataFetchingEnvironment env, GraphFieldContainer source) {
+	public List<String> getLanguageArgument(DataFetchingEnvironment env, HibFieldContainer source) {
 		return getLanguageArgument(env, Arrays.asList(source.getLanguageTag()));
 	}
 
@@ -325,9 +326,9 @@ public abstract class AbstractTypeProvider {
 	 * @param root
 	 * @return
 	 */
-	protected HibCoreElement handleUuidNameArgs(DataFetchingEnvironment env, Object parent, DAOActions<?, ?> actions) {
+	protected HibCoreElement<?> handleUuidNameArgs(DataFetchingEnvironment env, Object parent, DAOActions<?, ?> actions) {
 		GraphQLContext gc = env.getContext();
-		HibCoreElement element = handleUuidNameArgsNoPerm(env, uuid -> actions.loadByUuid(context(Tx.get(), gc, parent), uuid, null, false),
+		HibCoreElement<?> element = handleUuidNameArgsNoPerm(env, uuid -> actions.loadByUuid(context(Tx.get(), gc, parent), uuid, null, false),
 			name -> actions.loadByName(context(Tx.get(), gc), name, null, false));
 		if (element == null) {
 			return null;
@@ -344,10 +345,10 @@ public abstract class AbstractTypeProvider {
 	 * @param nameFetcher
 	 * @return
 	 */
-	protected HibCoreElement handleUuidNameArgsNoPerm(DataFetchingEnvironment env, Function<String, HibCoreElement> uuidFetcher,
-		Function<String, HibCoreElement> nameFetcher) {
+	protected HibCoreElement<?> handleUuidNameArgsNoPerm(DataFetchingEnvironment env, Function<String, HibCoreElement<?>> uuidFetcher,
+		Function<String, HibCoreElement<?>> nameFetcher) {
 		String uuid = env.getArgument("uuid");
-		HibCoreElement element = null;
+		HibCoreElement<?> element = null;
 		if (uuid != null) {
 			element = uuidFetcher.apply(uuid);
 		}
@@ -366,7 +367,7 @@ public abstract class AbstractTypeProvider {
 		GraphQLContext gc = env.getContext();
 		HibBranch branch = env.getSource();
 		Stream<? extends HibSchemaVersion> schemas = StreamSupport.stream(branch.findActiveSchemaVersions().spliterator(), false);
-		UserDaoWrapper userDao = Tx.get().userDao();
+		UserDao userDao = Tx.get().userDao();
 
 		// We need to handle permissions here since we check the schema container perm and not the schema container version perm.
 		return handleUuidNameArgsNoPerm(env, uuid -> schemas.filter(schema -> {
@@ -379,7 +380,7 @@ public abstract class AbstractTypeProvider {
 	protected Page<HibSchemaVersion> handleBranchSchemas(DataFetchingEnvironment env) {
 		GraphQLContext gc = env.getContext();
 		HibBranch branch = env.getSource();
-		UserDaoWrapper userDao = Tx.get().userDao();
+		UserDao userDao = Tx.get().userDao();
 
 		Stream<? extends HibSchemaVersion> schemas = StreamSupport.stream(branch.findActiveSchemaVersions().spliterator(), false).filter(
 			schema -> userDao.hasPermission(gc.getUser(), schema.getSchemaContainer(), READ_PERM));
@@ -402,7 +403,7 @@ public abstract class AbstractTypeProvider {
 	 * @param filterProvider
 	 * @return
 	 */
-	protected <T extends HibCoreElement> GraphQLFieldDefinition newPagingSearchField(String name, String description,
+	protected <T extends HibCoreElement<?>> GraphQLFieldDefinition newPagingSearchField(String name, String description,
 		DAOActions<T, ?> actions,
 		String pageTypeName, SearchHandler<?, ?> searchHandler, StartFilter<T, Map<String, ?>> filterProvider) {
 		Builder fieldDefBuilder = newFieldDefinition()
@@ -555,20 +556,14 @@ public abstract class AbstractTypeProvider {
 	 */
 	protected DynamicStreamPageImpl<NodeContent> fetchFilteredNodes(DataFetchingEnvironment env) {
 		Tx tx = Tx.get();
-		ContentDaoWrapper contentDao = tx.contentDao();
-		NodeDaoWrapper nodeDao = tx.nodeDao();
+		NodeDao nodeDao = tx.nodeDao();
 		GraphQLContext gc = env.getContext();
 		HibProject project = tx.getProject(gc);
 
 		List<String> languageTags = getLanguageArgument(env);
 		ContainerType type = getNodeVersion(env);
 
-		Stream<NodeContent> contents = nodeDao.findAllStream(project, gc, READ_PUBLISHED_PERM)
-			// Now lets try to load the containers for those found nodes - apply the language fallback
-			.map(node -> new NodeContent(node, contentDao.findVersion(node, gc, languageTags, type), languageTags, type))
-			// Filter nodes without a container
-			.filter(content -> content.getContainer() != null)
-			.filter(gc::hasReadPerm);
+		Stream<NodeContent> contents = nodeDao.findAllContent(project, gc, languageTags, type);
 
 		return applyNodeFilter(env, contents);
 	}

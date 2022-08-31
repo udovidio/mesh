@@ -8,8 +8,11 @@ import javax.inject.Singleton;
 
 import com.gentics.mesh.MeshStatus;
 import com.gentics.mesh.cli.BootstrapInitializer;
+import com.gentics.mesh.core.db.Database;
+import com.gentics.mesh.core.db.cluster.ClusterManager;
+import com.gentics.mesh.core.endpoint.admin.LocalConfigApi;
+import com.gentics.mesh.core.rest.admin.localconfig.LocalConfigModel;
 import com.gentics.mesh.core.rest.plugin.PluginStatus;
-import com.gentics.mesh.graphdb.cluster.ClusterManager;
 import com.gentics.mesh.monitor.liveness.LivenessManager;
 import com.gentics.mesh.plugin.manager.MeshPluginManager;
 
@@ -32,12 +35,18 @@ public class MonitoringCrudHandler {
 
 	private final LivenessManager liveness;
 
+	private final LocalConfigApi localConfigApi;
+
+	private final Database db;
+
 	@Inject
-	public MonitoringCrudHandler(BootstrapInitializer boot, MeshPluginManager pluginManager, ClusterManager clusterManager, LivenessManager liveness) {
+	public MonitoringCrudHandler(BootstrapInitializer boot, MeshPluginManager pluginManager, ClusterManager clusterManager, LivenessManager liveness, LocalConfigApi localConfigApi, Database db) {
 		this.boot = boot;
 		this.pluginManager = pluginManager;
 		this.clusterManager = clusterManager;
 		this.liveness = liveness;
+		this.localConfigApi = localConfigApi;
+		this.db = db;
 	}
 
 	/**
@@ -92,12 +101,46 @@ public class MonitoringCrudHandler {
 			throw error(SERVICE_UNAVAILABLE, "error_internal");
 		}
 
+		if (!db.isHealthy()) {
+			log.warn("Failing DB health check");
+			throw error(SERVICE_UNAVAILABLE, "error_internal");
+		}
+
 		MeshStatus status = boot.mesh().getStatus();
-		if (status.equals(MeshStatus.READY)) {
-			rc.response().end();
-		} else {
+		if (!status.equals(MeshStatus.READY)) {
 			log.warn("Status is {" + status.name() + "} - Failing readiness probe");
 			throw error(SERVICE_UNAVAILABLE, "error_internal");
 		}
+		rc.response().end();
+	}
+
+	/**
+	 * Throw an error if:
+	 * - mesh is in read only mode
+	 * - topology lock is held
+	 * - writeQuorum is not reached
+	 *
+	 * @param rc
+	 */
+	public void handleWritable(RoutingContext rc) {
+		localConfigApi.getActiveConfig()
+				.map(LocalConfigModel::isReadOnly)
+				.map(Boolean::booleanValue)
+				.subscribe(isReadOnly -> {
+					if (isReadOnly) {
+						log.warn("Local node cannot write - read only mode set");
+						rc.fail(error(SERVICE_UNAVAILABLE, "error_internal"));
+					} else if (db.isReadOnly(false)) {
+						rc.fail(error(SERVICE_UNAVAILABLE, "error_internal"));
+					} else if (clusterManager.isClusterTopologyLocked()) {
+						log.warn("Local node cannot write - cluster topology locked");
+						rc.fail(error(SERVICE_UNAVAILABLE, "error_internal"));
+					} else if (!clusterManager.isWriteQuorumReached()) {
+						log.warn("Local node cannot write - write quorum not reached");
+						rc.fail(error(SERVICE_UNAVAILABLE, "error_internal"));
+					} else {
+						rc.response().setStatusCode(200).end();
+					}
+				});
 	}
 }

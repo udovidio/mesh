@@ -11,9 +11,9 @@ import javax.inject.Singleton;
 
 import com.gentics.mesh.Mesh;
 import com.gentics.mesh.cli.BootstrapInitializer;
+import com.gentics.mesh.core.db.Database;
 import com.gentics.mesh.core.endpoint.admin.LocalConfigApi;
 import com.gentics.mesh.etc.config.MeshOptions;
-import com.gentics.mesh.graphdb.spi.Database;
 import com.gentics.mesh.graphql.context.GraphQLContext;
 import com.gentics.mesh.search.SearchProvider;
 
@@ -102,7 +102,7 @@ public class MeshTypeProvider {
 		root.field(
 				newFieldDefinition().name("searchVersion").description("Version of the used search index").type(GraphQLString).dataFetcher(env -> {
 					if (isTokenAllowed(env)) {
-						return searchProvider.getVersion();
+						return searchProvider.getVersion(true);
 					} else {
 						return null;
 					}

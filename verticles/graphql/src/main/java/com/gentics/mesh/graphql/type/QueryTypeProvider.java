@@ -17,6 +17,7 @@ import static com.gentics.mesh.graphql.type.ProjectReferenceTypeProvider.PROJECT
 import static com.gentics.mesh.graphql.type.ProjectReferenceTypeProvider.PROJECT_REFERENCE_TYPE_NAME;
 import static com.gentics.mesh.graphql.type.ProjectTypeProvider.PROJECT_PAGE_TYPE_NAME;
 import static com.gentics.mesh.graphql.type.ProjectTypeProvider.PROJECT_TYPE_NAME;
+import static com.gentics.mesh.graphql.type.NodeTypeProvider.createNodeContentWithSoftPermissions;
 import static com.gentics.mesh.graphql.type.RoleTypeProvider.ROLE_PAGE_TYPE_NAME;
 import static com.gentics.mesh.graphql.type.RoleTypeProvider.ROLE_TYPE_NAME;
 import static com.gentics.mesh.graphql.type.SchemaTypeProvider.SCHEMA_PAGE_TYPE_NAME;
@@ -33,25 +34,28 @@ import static graphql.schema.GraphQLFieldDefinition.newFieldDefinition;
 import static graphql.schema.GraphQLObjectType.newObject;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
+import graphql.GraphQLError;
+import graphql.execution.DataFetcherResult;
 import org.apache.commons.lang3.tuple.Pair;
 
 import com.gentics.mesh.cli.BootstrapInitializer;
 import com.gentics.mesh.core.action.DAOActionsCollection;
-import com.gentics.mesh.core.data.NodeGraphFieldContainer;
+import com.gentics.mesh.core.data.HibNodeFieldContainer;
 import com.gentics.mesh.core.data.branch.HibBranch;
-import com.gentics.mesh.core.data.dao.ContentDaoWrapper;
-import com.gentics.mesh.core.data.dao.NodeDaoWrapper;
+import com.gentics.mesh.core.data.dao.ContentDao;
+import com.gentics.mesh.core.data.dao.NodeDao;
 import com.gentics.mesh.core.data.node.HibNode;
-import com.gentics.mesh.core.data.node.Node;
 import com.gentics.mesh.core.data.node.NodeContent;
 import com.gentics.mesh.core.data.page.Page;
 import com.gentics.mesh.core.data.page.impl.DynamicStreamPageImpl;
@@ -72,7 +76,7 @@ import com.gentics.mesh.graphql.type.field.FieldDefinitionProvider;
 import com.gentics.mesh.graphql.type.field.MicronodeFieldTypeProvider;
 import com.gentics.mesh.handler.Versioned;
 import com.gentics.mesh.path.Path;
-import com.gentics.mesh.path.impl.PathSegmentImpl;
+import com.gentics.mesh.path.PathSegment;
 import com.gentics.mesh.search.index.group.GroupSearchHandler;
 import com.gentics.mesh.search.index.project.ProjectSearchHandler;
 import com.gentics.mesh.search.index.role.RoleSearchHandler;
@@ -81,7 +85,6 @@ import com.gentics.mesh.search.index.tagfamily.TagFamilySearchHandler;
 import com.gentics.mesh.search.index.user.UserSearchHandler;
 
 import graphql.ExceptionWhileDataFetching;
-import graphql.execution.ExecutionContext;
 import graphql.schema.DataFetchingEnvironment;
 import graphql.schema.GraphQLList;
 import graphql.schema.GraphQLObjectType;
@@ -203,24 +206,25 @@ public class QueryTypeProvider extends AbstractTypeProvider {
 	 * @param env
 	 * @return A page containing all found nodes matching the given UUIDs
 	 */
-	private Page<NodeContent> fetchNodesByUuid(DataFetchingEnvironment env) {
+	private DataFetcherResult<Page<NodeContent>> fetchNodesByUuid(DataFetchingEnvironment env) {
 		Tx tx = Tx.get();
-		ContentDaoWrapper contentDao = tx.contentDao();
-		NodeDaoWrapper nodeDao = tx.nodeDao();
+		ContentDao contentDao = tx.contentDao();
+		NodeDao nodeDao = tx.nodeDao();
 
 		List<String> uuids = env.getArgument("uuids");
 
 		if (uuids == null || uuids.isEmpty()) {
-			return new DynamicStreamPageImpl<>(Stream.empty(), getPagingInfo(env));
+			return DataFetcherResult.<Page<NodeContent>>newResult()
+					.data(new DynamicStreamPageImpl<>(Stream.empty(), getPagingInfo(env)))
+					.errors(Collections.emptyList()).build();
 		}
 
 		GraphQLContext gc = env.getContext();
 		HibProject project = tx.getProject(gc);
-		ExecutionContext ec = env.getExecutionContext();
 		List<String> languageTags = getLanguageArgument(env);
 		ContainerType type = getNodeVersion(env);
-
-		Stream<NodeContent> contents = uuids.stream()
+		List<GraphQLError> errors = new ArrayList<>();
+		List<NodeContent> contents = uuids.stream()
 			// When a node cannot be found, we still need the UUID for the error message.
 			.map(uuid -> Pair.of(uuid, nodeDao.findByUuid(project, uuid)))
 			.map(node -> {
@@ -231,39 +235,39 @@ public class QueryTypeProvider extends AbstractTypeProvider {
 				} else {
 					// The node was found, check the permissions.
 					try {
-						return (Node) gc.requiresPerm(node.getRight(), READ_PERM, READ_PUBLISHED_PERM);
+						return (HibNode) gc.requiresPerm(node.getRight(), READ_PERM, READ_PUBLISHED_PERM);
 					} catch (PermissionException e) {
 						error = e;
 					}
 				}
 
-				ec.addError(new ExceptionWhileDataFetching(env.getFieldTypeInfo().getPath(), error, env.getField().getSourceLocation()));
+				errors.add(new ExceptionWhileDataFetching(env.getExecutionStepInfo().getPath(), error, env.getField().getSourceLocation()));
 
 				return null;
 			})
 			.filter(Objects::nonNull)
 			.map(node -> {
-				NodeGraphFieldContainer container = contentDao.findVersion(node, gc, languageTags, type);
+				HibNodeFieldContainer container = contentDao.findVersion(node, gc, languageTags, type);
 				return new NodeContent(node, container, languageTags, type);
 			})
 			.filter(content -> content.getContainer() != null)
-			.filter(gc::hasReadPerm);
+			.filter(content1 -> gc.hasReadPerm(content1, type)).collect(Collectors.toList());
 
-		return applyNodeFilter(env, contents);
+		return DataFetcherResult.<Page<NodeContent>>newResult().data(applyNodeFilter(env, contents.stream())).errors(errors).build();
 	}
 
 	/**
 	 * Data fetcher for nodes.
-	 * 
+	 *
 	 * @param env
 	 * @return
 	 */
 	public Object nodeFetcher(DataFetchingEnvironment env) {
 		Tx tx = Tx.get();
-		ContentDaoWrapper contentDao = tx.contentDao();
+		ContentDao contentDao = tx.contentDao();
 		String uuid = env.getArgument("uuid");
 		if (uuid != null) {
-			NodeDaoWrapper nodeDao = tx.nodeDao();
+			NodeDao nodeDao = tx.nodeDao();
 			GraphQLContext gc = env.getContext();
 			HibNode node = nodeDao.findByUuid(tx.getProject(gc), uuid);
 			if (node == null) {
@@ -274,11 +278,9 @@ public class QueryTypeProvider extends AbstractTypeProvider {
 			ContainerType type = getNodeVersion(env);
 
 			node = gc.requiresPerm(node, READ_PERM, READ_PUBLISHED_PERM);
-			NodeGraphFieldContainer container = contentDao.findVersion(node, gc, languageTags, type);
-			if (container != null) {
-				container = gc.requiresReadPermSoft(container, env);
-			}
-			return new NodeContent(node, container, languageTags, type);
+			HibNodeFieldContainer container = contentDao.findVersion(node, gc, languageTags, type);
+
+			return createNodeContentWithSoftPermissions(env, gc, node, languageTags, type, container);
 		}
 		String path = env.getArgument("path");
 		if (path != null) {
@@ -292,17 +294,16 @@ public class QueryTypeProvider extends AbstractTypeProvider {
 			}
 
 			// TODO HIB
-			PathSegmentImpl graphSegment = (PathSegmentImpl) pathResult.getLast();
-			NodeGraphFieldContainer container = graphSegment.getContainer();
+			PathSegment graphSegment = pathResult.getLast();
+			HibNodeFieldContainer container = graphSegment.getContainer();
 			HibNode nodeOfContainer = contentDao.getNode(container);
 
 			nodeOfContainer = gc.requiresPerm(nodeOfContainer, READ_PERM, READ_PUBLISHED_PERM);
-			container = gc.requiresReadPermSoft(container, env);
 			List<String> langs = new ArrayList<>();
 			if (container != null) {
 				langs.add(container.getLanguageTag());
 			}
-			return new NodeContent(nodeOfContainer, container, langs, type);
+			return createNodeContentWithSoftPermissions(env, gc, nodeOfContainer, langs, type, container);
 		}
 		return null;
 	}
@@ -352,17 +353,17 @@ public class QueryTypeProvider extends AbstractTypeProvider {
 	 */
 	public Object rootNodeFetcher(DataFetchingEnvironment env) {
 		Tx tx = Tx.get();
-		ContentDaoWrapper contentDao = tx.contentDao();
+		ContentDao contentDao = tx.contentDao();
 		GraphQLContext gc = env.getContext();
 		HibProject project = tx.getProject(gc);
 		if (project != null) {
 			HibNode node = project.getBaseNode();
-			gc.requiresPerm(node, READ_PERM, READ_PUBLISHED_PERM);
-			List<String> languageTags = getLanguageArgument(env);
 			ContainerType type = getNodeVersion(env);
-			NodeGraphFieldContainer container = contentDao.findVersion(node, gc, languageTags, type);
-			container = gc.requiresReadPermSoft(container, env);
-			return new NodeContent(node, container, languageTags, type);
+			gc.requiresPerm(node, READ_PUBLISHED_PERM, READ_PERM);
+			List<String> languageTags = getLanguageArgument(env);
+			HibNodeFieldContainer container = contentDao.findVersion(node, gc, languageTags, type);
+
+			return createNodeContentWithSoftPermissions(env, gc, node, languageTags, type, container);
 		}
 		return null;
 	}

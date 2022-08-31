@@ -35,6 +35,7 @@ import com.gentics.mesh.core.endpoint.admin.debuginfo.DebugInfoHandler;
 import com.gentics.mesh.core.endpoint.admin.plugin.PluginHandler;
 import com.gentics.mesh.core.verticle.handler.HandlerUtilities;
 import com.gentics.mesh.parameter.impl.BackupParametersImpl;
+import com.gentics.mesh.parameter.impl.JobParametersImpl;
 import com.gentics.mesh.rest.InternalEndpointRoute;
 import com.gentics.mesh.router.route.AbstractInternalEndpoint;
 
@@ -110,6 +111,7 @@ public class AdminEndpoint extends AbstractInternalEndpoint {
 		addRuntimeConfigHandler();
 		addShutdownHandler();
 		addCoordinatorHandler();
+		addCacheHandler();
 	}
 
 	private void addSecurityLogger() {
@@ -158,7 +160,7 @@ public class AdminEndpoint extends AbstractInternalEndpoint {
 			InternalActionContext ac = wrap(rc);
 			String uuid = ac.getParameter("uuid");
 			pluginHandler.handleRead(ac, uuid);
-		});
+		}, false);
 
 		InternalEndpointRoute readAllEndpoint = createRoute();
 		readAllEndpoint.path("/plugins");
@@ -168,7 +170,7 @@ public class AdminEndpoint extends AbstractInternalEndpoint {
 		readAllEndpoint.exampleResponse(OK, adminExamples.createPluginListResponse(), "Plugin list response.");
 		readAllEndpoint.blockingHandler(rc -> {
 			pluginHandler.handleReadList(wrap(rc));
-		});
+		}, false);
 	}
 
 	/**
@@ -184,7 +186,7 @@ public class AdminEndpoint extends AbstractInternalEndpoint {
 		endpoint.exampleResponse(OK, adminExamples.createClusterStatusResponse(), "Cluster status.");
 		endpoint.blockingHandler(rc -> {
 			adminHandler.handleClusterStatus(wrap(rc));
-		});
+		}, false);
 	}
 
 	private void addClusterConfigHandler() {
@@ -196,7 +198,7 @@ public class AdminEndpoint extends AbstractInternalEndpoint {
 		endpoint.exampleResponse(OK, adminExamples.createClusterConfigResponse(), "Currently active cluster configuration.");
 		endpoint.blockingHandler(rc -> {
 			adminHandler.handleLoadClusterConfig(wrap(rc));
-		});
+		}, false);
 
 		InternalEndpointRoute updateEndpoint = createRoute();
 		updateEndpoint.path("/cluster/config");
@@ -240,13 +242,13 @@ public class AdminEndpoint extends AbstractInternalEndpoint {
 		endpoint.path("/graphdb/export");
 		endpoint.method(POST);
 		endpoint.setMutating(false);
-		endpoint.description("Invoke a orientdb graph database export.");
+		endpoint.description("Invoke a orientdb graph database export. Irrelevant for non-OrientDB server.");
 		endpoint.produces(APPLICATION_JSON);
 		endpoint.exampleResponse(OK, miscExamples.createMessageResponse(), "Export process was invoked.");
 		endpoint.events(GRAPH_EXPORT_START, GRAPH_EXPORT_FINISHED);
 		endpoint.blockingHandler(rc -> {
 			adminHandler.handleExport(wrap(rc));
-		});
+		}, false);
 	}
 
 	private void addImportHandler() {
@@ -254,7 +256,7 @@ public class AdminEndpoint extends AbstractInternalEndpoint {
 		endpoint.path("/graphdb/import");
 		endpoint.method(POST);
 		endpoint.description(
-			"Invoke a orientdb graph database import. The latest import file from the import directory will be used for this operation.");
+			"Invoke a orientdb graph database import. The latest import file from the import directory will be used for this operation. Irrelevant for non-OrientDB server.");
 		endpoint.produces(APPLICATION_JSON);
 		endpoint.exampleResponse(OK, miscExamples.createMessageResponse(), "Database import command was invoked.");
 		endpoint.events(GRAPH_IMPORT_START, GRAPH_IMPORT_FINISHED);
@@ -267,7 +269,7 @@ public class AdminEndpoint extends AbstractInternalEndpoint {
 		InternalEndpointRoute endpoint = createRoute();
 		endpoint.path("/graphdb/restore");
 		endpoint.description(
-			"Invoke a graph database restore. The latest dump from the backup directory will be inserted. Please note that this operation will block all current operation and effectively destroy all previously stored data.");
+			"Invoke a graph database restore. The latest dump from the backup directory will be inserted. Please note that this operation will block all current operation and effectively destroy all previously stored data. Irrelevant for non-OrientDB server.");
 		endpoint.produces(APPLICATION_JSON);
 		endpoint.exampleResponse(OK, miscExamples.createMessageResponse(), "Database restore command was invoked.");
 		endpoint.method(POST);
@@ -284,7 +286,7 @@ public class AdminEndpoint extends AbstractInternalEndpoint {
 		endpoint.setMutating(false);
 		endpoint.addQueryParameters(BackupParametersImpl.class);
 		endpoint.description(
-			"Invoke a graph database backup and dump the data to the configured backup location. Note that this operation will block all current operation.");
+			"Invoke a graph database backup and dump the data to the configured backup location. Note that this operation will block all current operation. Irrelevant for non-OrientDB server.");
 		endpoint.produces(APPLICATION_JSON);
 		endpoint.exampleResponse(OK, miscExamples.createMessageResponse(), "Incremental backup was invoked.");
 		endpoint.events(GRAPH_BACKUP_START, GRAPH_BACKUP_FINISHED);
@@ -332,11 +334,12 @@ public class AdminEndpoint extends AbstractInternalEndpoint {
 		readJobList.method(GET);
 		readJobList.description("List all currently queued jobs.");
 		readJobList.produces(APPLICATION_JSON);
+		readJobList.addQueryParameters(JobParametersImpl.class);
 		readJobList.exampleResponse(OK, jobExamples.createJobList(), "List of jobs.");
 		readJobList.blockingHandler(rc -> {
 			InternalActionContext ac = wrap(rc);
 			jobHandler.handleReadList(ac);
-		});
+		}, false);
 
 		InternalEndpointRoute readJob = createRoute();
 		readJob.path("/jobs/:jobUuid");
@@ -349,7 +352,7 @@ public class AdminEndpoint extends AbstractInternalEndpoint {
 			InternalActionContext ac = wrap(rc);
 			String uuid = ac.getParameter("jobUuid");
 			jobHandler.handleRead(ac, uuid);
-		});
+		}, false);
 
 		InternalEndpointRoute deleteJob = createRoute();
 		deleteJob.path("/jobs/:jobUuid");
@@ -459,7 +462,21 @@ public class AdminEndpoint extends AbstractInternalEndpoint {
 		updateConfig.exampleRequest(adminExamples.createCoordinatorConfigRequest());
 		updateConfig.handler(rc -> adminHandler.handleUpdateCoordinationConfig(wrap(rc)));
 	}
-	
+
+	private void addCacheHandler() {
+		InternalEndpointRoute endpoint = createRoute();
+		endpoint.path("/cache");
+		endpoint.method(DELETE);
+		endpoint.setMutating(false);
+		endpoint.description(
+			"Clear all internal caches (cluster wide).");
+		endpoint.produces(APPLICATION_JSON);
+		endpoint.exampleResponse(OK, miscExamples.createMessageResponse(), "Clearing the caches has been invoked.");
+		endpoint.handler(rc -> {
+			adminHandler.handleCacheClear(wrap(rc));
+		});
+	}
+
 	static Handler<RoutingContext> internalHandler(BiConsumer<RoutingContext, InternalActionContext> handler) {
 		return ctx -> handler.accept(ctx, new InternalRoutingActionContextImpl(ctx));
 	}

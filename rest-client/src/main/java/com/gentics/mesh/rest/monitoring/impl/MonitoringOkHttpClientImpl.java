@@ -61,7 +61,7 @@ public class MonitoringOkHttpClientImpl implements MonitoringRestClient {
 	}
 
 	private <T> MeshRequest<T> prepareRequest(HttpMethod method, String path, Class<? extends T> classOfT) {
-		return MeshOkHttpRequestImpl.EmptyRequest(client, method.name(), getUrl(path), Collections.emptyMap(), classOfT);
+		return MeshOkHttpRequestImpl.EmptyRequest(client, null, method.name(), getUrl(path), Collections.emptyMap(), classOfT);
 	}
 
 	@Override
@@ -92,6 +92,11 @@ public class MonitoringOkHttpClientImpl implements MonitoringRestClient {
 	@Override
 	public MeshRequest<EmptyResponse> live() {
 		return prepareRequest(GET, "/health/live", EmptyResponse.class);
+	}
+
+	@Override
+	public MeshRequest<EmptyResponse> writable() {
+		return prepareRequest(GET, "/health/writable", EmptyResponse.class);
 	}
 
 	@Override

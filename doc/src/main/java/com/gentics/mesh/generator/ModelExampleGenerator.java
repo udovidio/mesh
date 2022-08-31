@@ -14,6 +14,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
+import io.vertx.core.json.JsonObject;
 import org.apache.commons.io.FileUtils;
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
@@ -22,7 +23,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gentics.mesh.OptionsLoader;
 import com.gentics.mesh.core.rest.schema.change.impl.SchemaChangeModel;
 import com.gentics.mesh.etc.config.AuthenticationOptions;
-import com.gentics.mesh.etc.config.MeshOptions;
+import com.gentics.mesh.etc.config.OrientDBMeshOptions;
 
 /**
  * Example generator for various JSON / YAML models.
@@ -56,7 +57,8 @@ public class ModelExampleGenerator extends AbstractGenerator {
 	 * @throws IOException
 	 */
 	private void writeChangeExamples() throws JsonProcessingException, IOException {
-		SchemaChangeModel addFieldChange = SchemaChangeModel.createAddFieldChange("fieldToBeAdded", "list", "Field Label Value");
+		JsonObject elasticSearchSettings = new JsonObject().put("settings", "value");
+		SchemaChangeModel addFieldChange = SchemaChangeModel.createAddFieldChange("fieldToBeAdded", "list", "Field Label Value", elasticSearchSettings);
 		addFieldChange.setProperty(ADD_FIELD_AFTER_KEY, "firstField");
 		addFieldChange.setProperty(LIST_TYPE_KEY, "html");
 		writeJson(addFieldChange, "addfield.json");
@@ -87,7 +89,7 @@ public class ModelExampleGenerator extends AbstractGenerator {
 	}
 
 	private void writeMeshConfig() throws JsonProcessingException, IOException {
-		MeshOptions conf = new MeshOptions();
+		OrientDBMeshOptions conf = new OrientDBMeshOptions();
 		conf.setTempDirectory("/opt/mesh/data/tmp");
 		conf.getUploadOptions().setTempDirectory("/opt/mesh/data/tmp/temp-uploads");
 		conf.getAuthenticationOptions().setKeystorePassword("<Your Password>");

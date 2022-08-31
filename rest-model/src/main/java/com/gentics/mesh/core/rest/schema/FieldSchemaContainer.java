@@ -64,7 +64,7 @@ public interface FieldSchemaContainer extends RestModel {
 	 * @return
 	 */
 	default FieldSchema getField(String fieldName) {
-		return (FieldSchema) getFields().stream().filter(f -> f.getName().equals(fieldName)).findFirst().orElse(null);
+		return getFields().stream().filter(f -> f.getName().equals(fieldName)).findFirst().orElse(null);
 	}
 
 	/**
@@ -75,7 +75,7 @@ public interface FieldSchemaContainer extends RestModel {
 	 * @return
 	 */
 	default <T> T getField(String fieldName, Class<T> classOfT) {
-		return (T) getFields().stream().filter(f -> f.getName().equals(fieldName)).findFirst().orElse(null);
+		return classOfT.cast(getFields().stream().filter(f -> f.getName().equals(fieldName)).findFirst().orElse(null));
 	}
 
 	/**
@@ -208,7 +208,7 @@ public interface FieldSchemaContainer extends RestModel {
 		Set<String> fieldNames = new HashSet<>();
 		for (FieldSchema field : getFields()) {
 			if (field.getName() != null) {
-				if (!fieldNames.add(field.getName())) {
+				if (!fieldNames.add(field.getName().toLowerCase())) {
 					throw error(BAD_REQUEST, "schema_error_duplicate_field_name", field.getName());
 				}
 			}

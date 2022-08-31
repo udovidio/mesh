@@ -1,3 +1,4 @@
+
 ---
 title: Changelog
 ---
@@ -21,10 +22,231 @@ include::content/docs/variables.adoc-include[]
 
 * The `html` field type will be removed in the future. Instead the `string` type will be used in combination with an additional configuration property for this field in the schema. Of course, your existing schemas will be migrated for you.
 
-* The support for the *embedded* version of Elasticsearch will be dropped in the future. It is highly recommended to link:{{< relref "elasticsearch.asciidoc" >}}#_dedicated_elasticsearch[setup Elasticsearch as a dedicated service].
+[[v1.9.1]]
+== 1.9.1 (19.08.2022)
+
+icon:check[] GraphQL: When a node with the root webpath was retrieved in a specific branch, a permission error was returned, even if user had permission for it. This has been fixed.
+
+icon:check[] GraphQL: The behaviour for getting a single node with `version`=`draft` using GraphQL has been changed. Before, if a user had only `read published` permissions
+and was requesting a draft node, the node content was returned in case the draft version matched the published version. Now a permission error will be returned
+without the actual content of the node.
+
+[[v1.9.0]]
+== 1.9.0 (22.07.2022)
+
+This version contains OrientDB version `3.1.18`.
+
+icon:plus[] It is now possible to use an external SQL database for data storage as alternative to the embedded OrientDB by using the commercially available `Gentics Mesh SQL`.
+
+icon:check[] Core: Possible errors during node migrations in branches have been fixed.
+
+icon:plus[] Java Rest Client: The new options `maxRetries` and `retryDelayMs` can be used to configure automatic retries for requests to Mesh which failed due to a network error. By default retries are disabled. A value of -1 for `retryDelayMs` will automatically calculate a delay such that all tries are performed in the timespan of the call timeout configured for the Ok HTTP client.
+
+icon:check[] Plugins: Fixes plugin initialization such that plugins that failed to load will cause the liveness probe to return an unhealthy status.
+
+icon:check[] Cluster: The plugin initialization now waits not only for the write quorum being reached, but for the node availability as well, during the startup.
+
+icon:check[] Core: Schema field names are now checked for uniqueness regardless of case sensitivity. This behavior was already
+enforced in the UI, and is now enforced in the REST API. The check is not performed for existing schemas.
+
+icon:check[] Core: When a project was deleted, its associated version purge jobs were not. This has been fixed.
+
+[[v1.8.6]]
+== 1.8.6 (06.07.2022)
+
+icon:check[] GraphQL: The behaviour for getting lists of nodes with `version`=`draft` using the REST API or GraphQL was inconsistent for nodes,
+for which the requesting user only had the `read published` permission.
+When using the REST API, those nodes were never returned, using GraphQL, those nodes were returned, if they were published and the draft version
+happened to be identical to the published version.
+The behaviour when using GraphQL has been changed to be identical to the REST API now.
+
+icon:check[] Rest: The endpoint `GET /api/v2/{project}/tagFamilies/{tagFamilyUuid}/tags/{tagUuid}/nodes` did not correctly check for the `read`
+when called with `version`=`draft`, but returned all tagged nodes with `read published` permission. This has been fixed.
+
+icon:check[] Rest: The endpoint `GET /api/v2/{project}/navroot/{path}` failed with a 404 error if called with `version`=`published` and at least
+one of the nodes in the node structure was not published. This has been fixed.
+
+icon:check[] Documentation: The misleading `image` mentions in the Micronode documentation have been removed.
+
+icon:check[] Jobs: Previously jobs were running in a single transaction. This has been changed to use multiple transactions during the migration.
+
+icon:check[] Jobs: Schema, Microschema and Branch jobs are now migrating entites in batches, instead of one at a time. The number of elements in the batch can be configured in the MeshOptions.
+
+icon:check[] Core: Caffeine caching library has been updated to version `2.8.0`.
+
+icon:check[] Core: Graphql-java library has been updated to version `12.0`.
+
+icon:check[] Core: If a link to a node was rendered from a url field, the path prefix of the used branch was ignored. This has been changed now,
+so that links to nodes will always contain the path prefix, regardless of whether the link is rendered from a url field or from segment fields.
+
+icon:check[] Core: When the pathPrefix of a branch was changed, node could possibly still be access using the old pathPrefix due to an internal
+cache, which was not invalidated. The cache will now be cleared when a branch is modified.
+
+icon:check[] GraphQL: The fields `hostname`, `ssl` and `pathPrefix` have been added to the type `branch`.
+
+[[v1.8.5]]
+== 1.8.5 (31.05.2022)
+
+icon:check[] Core: The internal cache for user permissions has been optimized.
+
+icon:check[] OrientDB: The included OrientDB version has been updated to version `3.1.18`.
+
+icon:check[] Search: When a schema contained a field of type "micronode" or "list" of "micronode" and no "allow", generating the microschema version
+hash as part of the search index name failed with a NullPointerException.
+This has been fixed, so that the microschema version hash will now be null in such cases (like if "allow" was set to an empty array).
+
+icon:check[] Core: The default values for the periodic disk quota check have been changed to absolute values:
+the default for `storage.diskQuota.warnThreshold` is now `3G` and the default for `storage.diskQuota.readOnlyThreshold` is `1G`.
+
+icon:check[] Server: Fixed defined Health-Check in docker container and added a startup-grace period of 60s.
+
+[[v1.8.4]]
+== 1.8.4 (10.05.2022)
+
+icon:check[] Rest: Many reading request were implemented in a way that they would never be executed concurrently with other reading requests.
+So would e.g. a long running graphql request cause webroot requests executed at the same time to be queued until the graphql request was done.
+The behaviour has been changed, so that reading requests will only be queued, if the worker pool has been exhausted.
+
+
+icon:check[] Core: A periodic check for the EventBus has been added, which can be configured via the configuration settings `vertxOptions.eventBus.checkInterval`,
+`vertxOptions.eventBus.warnThreshold` and `vertxOptions.eventBus.errorThreshold`. If enabled (which is the default), and the periodically sent ping event is not
+received within the given error threshold, the Mesh instance which be considered unhealthy (liveness check will fail).
+
+[[v1.8.3]]
+== 1.8.3 (08.04.2022)
+
+icon:check[] Core: The included Mesh UI has been updated to version `1.3.3`.
+
+icon:check[] Plugins: Creating a static handler for files in the plugin's classpath using the new method RestPlugin::addStaticHandlerFromClasspath did not
+work, if the plugin directory was configured with an absolute path. Plugin initialization would fail, because the static handler could not be created.
+This has been fixed by allowing root filesystem access to the static handler, if the plugin directory is configured with an absolute path.
+
+icon:check[] Clustering: When starting an instance of Gentics Mesh with the command line parameter `-resetAdminPassword` to reset the password of the
+`admin` user, starting would fail if the write quorum of OrientDB was not reached. The startup behaviour has been changed now, so that resetting the
+password is delayed until the write quorum is reached.
+
+icon:check[] Rest: When creating a new user and setting the admin flag to `false`, this failed if the request user did not have the admin flag set
+to `true`. The permission check has been fixed now, so that the admin flag is only required for the requesting user, if the new user should also
+have the admin flag set to `true`.
+
+icon:check[] Core: When a project was renamed, deleted and then recreated with the same name, an internal cache was not cleared and caused
+subsequent errors in calls to the project, until the Mesh instance was restarted.
+This has been fixed now. The internal caches will be properly cleared.
+
+icon:plus[] Rest: The new endpoint `DELETE /api/v1/admin/cache` will clear all internal caches (cluster wide).
+
+[[v1.8.2]]
+== 1.8.2 (29.03.2022)
+
+icon:check[] Core: The max form attribute size can now be configured and is set to unlimited by default. This limit became relevant for multipart requests after the update to Vert.x 3.9.12.
+
+[[v1.8.1]]
+== 1.8.1 (24.03.2022)
+
+icon:check[] Core: The included Mesh UI has been updated to version `1.3.2`.
+
+[[v1.8.0]]
+== 1.8.0 (21.03.2022)
+
+icon:bullhorn[] Architecture overhaul
+
+[quote]
+____
+
+The internal architecture has been changed, in order to make a clean separation between the business logic and
+the persistence layer.
+
+The business logic is now completely independent from our current persistency layer (OrientDB), but uses an
+(internal) persistence API instead. Persistence with OrientDB is the current implementation of the persistence API.
+____
+
+CAUTION: The support for the *embedded* version of Elasticsearch has been dropped. It is necessary now to link:{{< relref "elasticsearch.asciidoc" >}}#_dedicated_elasticsearch[setup Elasticsearch as a dedicated service].
+
+icon:plus[] Core: The core Vert.x library was updated to version `3.9.12`.
+
+CAUTION: With the update to Vert.x 3.9.12, creating a StaticHandler in a plugin to serve static files from the plugin's classpath does not work any more.
+Instead of creating an instance of the StaticHandler, the new method RestPlugin::addStaticHandlerFromClasspath should be used instead.
+
+icon:plus[] Rest: The endpoint `/api/v1/admin/jobs` now supports query parameters for filtering
+(`status`, `type`, `branchName`, `branchUuid`, `schemaName`, `schemaUuid`, `microschemaName`, `microschemaUuid`, `fromVersion`, `toVersion`).
+
+icon:check[] Search: The periodic check for correctness of the indices in Elasticsearch created temporary indices, which did not start with the installation prefix,
+and thus were sometimes not cleaned up. The naming of those temporary indices has now been changed to also start with the installation prefix.
+
+icon:check[] Core: The 'commons-codec' libary has been updated. This fixes possible internal errors when parsing uploaded files using tika.
+
+icon:plus[] Core: The Jackson libraries have been updated to version `2.13.2`.
+
+icon:plus[] Core: The Netty libraries have been updated to version `4.1.72.Final`.
+
+icon:check[] Security: The 'spring-security', 'jsoup', 'commons-io', 'guava', 'jackson-databind'  libraries have been updated.
+
+icon:check[] Cluster: When starting a node with a new version of Gentics Mesh in a cluster, application of the changelog and setting the new Mesh version and
+database revision was delayed until the write quorum is reached, but not until the cluster topology lock was raised, which could cause a blocked transaction.
+This has been fixed.
+
+[[v1.7.22]]
+== 1.7.22 (1.12.2021)
+
+icon:check[] OrientDB: The included OrientDB version has been downgraded to version `3.1.11`.
+
+CAUTION: OrientDB version `3.1.15`, which was included in Mesh 1.7.21 has some serious bugs, therefore, Mesh 1.7.21 has been unreleased and the OrientDB Version
+has been changed back to `3.1.11`.
+
+icon:check[] Search: When the ElasticSearch instance is not available, getting version information from the endpoint `/api/v1` failed with an internal
+server error. This has been fixed, calling the endpoint `/api/v1` will not fail anymore, but will not contain the ElasticSearch version.
+
+icon:check[] Rest: When a project with name "project" was deleted, calls to the endpoint `/projects` would cause 404 errors, until the Mesh instance was restarted.
+This has been fixed now.
+
+icon:check[] Java Rest Client: If requests to mesh fail with I/O errors (including timeouts), the thrown exception will now also contain the request method and URL.
+
+icon:check[] Server: Liveness-Check script `live.sh` will now fail if the `mesh.live` file has not been changed since 20s (previously 60s)
+
+icon:plus[] Docker-Image: The base image has been changed from JRE to JDK to include more tools for analyzing (e.g. creating heap-dumps). The base image has been updated to a newer JDK minor version (`11.0.12`)
+
+[[v1.7.21]]
+== 1.7.21 (11.11.2021 - Unreleased)
+
+icon:check[] OrientDB: The included OrientDB version has been updated to version `3.1.15`.
+
+icon:check[] Cluster: When doing a rolling update in a cluster, a OConcurrentModificationException could occur during the startup, which could cause
+subsequent errors. This has been fixed.
+
+icon:plus[] Core: A periodic check for available disk space has been added. If not enough disk space is available, Gentics Mesh will be set to read-only to avoid corruption
+of the storage due to a full disk. Additionally, the metrics `mesh_storage_disk_total` and `mesh_storage_disk_usable` have been added to monitoring.
+
+icon:check[] Search: The indices for nodes of a schema, which contains fields of type "micronode" have a mapping for the fields in the allowed microschemas, but were not
+changed, if the microschemas were changed. This caused subsequent errors while indexing or searching.
+The naming of such indices have been changed to contain a hash over all allowed microschema versions and when a microschema is changed, a new index will be created now.
+This update will automatically drop and recreate all existing indices for schemas containing fields of type "micronode".
+
+icon:plus[] AWS S3: Now the Cross-Origin Request Settings parameters of a S3 connection can be configured. By default the allowed headers/origins are set to `*`, the allowed methods are set to `"GET", "PUT", "POST", "DELETE"`. Setting any of the CORS configuration to `null` prevents is to override the server's default configuration. Setting all the CORS configuration to null or empty value prevents the CORS config to be changed at all.
+
+[[v1.7.20]]
+== 1.7.20 (19.10.2021)
+
+icon:check[] Server: added a health/writable monitoring and REST endpoint to check whether mesh is in a writable state (e.g. the topology lock is not hold).
+
+icon:check[] Server: when a schema was updated with a new field with elastic search properties, these were ignored. This has been fixed now.
+
+icon:check[] Search: If ElasticSearch indices, which were originally created by Mesh were dropped, they would probably be re-created with the default mapping when Mesh
+stored a document in the index. This could cause the index to be not completely filled and also the mapping to be incorrect, so that search queries would fail to find
+documents. In order to detect and repair such situations, a periodic check has been added to Mesh, which will check existence and correctness of all required ElasticSearch
+indices. Missing indices will be created and incorrect indices will be dropped and re-created. Afterwards a full sync for the affected indices will be triggered. The check
+period can be configured with the new configuration setting `search.indexCheckInterval`, which defaults to 60_000 milliseconds. Setting the interval to 0 will disable the
+periodic check (not recommended).
+
+icon:plus[] Search: The index maintenance endpoints `/api/v1/search/sync` and `/api/v1/search/clear` have been extended with the query parameter `index`, which can be used
+to restrict the synchronized/cleared indices by a regular expression.
+
+icon:check[] Search: The index maintenance actions triggered via `/api/v1/search/sync` and `/api/v1/search/clear` will now be redirected to the current master instance,
+if the cluster coordinator is used.
+
+icon:check[] Core: The included Mesh UI has been updated to version `1.3.1`, containing the language-related improvements and minor bugfixes.
 
 [[v1.7.19]]
-== 1.7.19 (TBD)
+== 1.7.19 (12.10.2021)
 
 icon:check[] Search: When a full synchronization of the search indices was triggered, language specific indices were unnecessarily removed first. This has been changed,
 language specific indices will now be treated like all other indices during a full synchronization.
@@ -42,9 +264,13 @@ icon:check[] Core: The overall memory consumption during a migration job has bee
 icon:check[] Clustering: Due to a bug in the vert.x eventbus system, elasticsearch sync operations were not only performed in the Mesh instance, were the
 causing data change actually happened, but on all Mesh instances, which caused unnecessary high load on the elasticsearch. This has been fixed with a workaround.
 
-icon:check[] Core: When deleting old versions of nodes, the related binaries were not deleted from the disk. This has been fixed now. Credits to [kdima001](https://github.com/kdima001).
+icon:check[] Core: When deleting old versions of nodes, the related binaries were not deleted from the disk. This has been fixed now. Credits to https://github.com/kdima001.
 
 icon:check[] Core: When an OrientDB transaction repeatedly fails and runs into the retry limit, the original cause will now also be logged.
+
+icon:check[] Server: When an OutOfMemory was caught or one of the plugins (permanently) failed to initialize, mesh was still considered to be live. This has been fixed now.
+
+icon:check[] Clustering: When doing an offline update of Mesh in a cluster, the first instance of the cluster could not be started with the new Mesh version, because the new version should be written into OrientDB, which failed due to write quorum not reached. The initialization procedure has been changed now, so that executing the changelog and storing the Mesh version and DB revision will now only be started after the write quorum has been reached.
 
 [[v1.7.18]]
 == 1.7.18 (23.09.2021)

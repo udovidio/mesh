@@ -2,19 +2,22 @@ package com.gentics.mesh.graphql.context.impl;
 
 import static com.gentics.mesh.core.rest.error.Errors.missingPerm;
 
+import java.util.Optional;
+
 import com.gentics.mesh.context.impl.InternalRoutingActionContextImpl;
 import com.gentics.mesh.core.data.HibCoreElement;
-import com.gentics.mesh.core.data.NodeGraphFieldContainer;
-import com.gentics.mesh.core.data.dao.ContentDaoWrapper;
-import com.gentics.mesh.core.data.dao.UserDaoWrapper;
-import com.gentics.mesh.core.data.node.HibNode;
+import com.gentics.mesh.core.data.HibNodeFieldContainer;
+import com.gentics.mesh.core.data.dao.ContentDao;
+import com.gentics.mesh.core.data.dao.UserDao;
 import com.gentics.mesh.core.data.node.NodeContent;
 import com.gentics.mesh.core.data.perm.InternalPermission;
 import com.gentics.mesh.core.db.Tx;
+import com.gentics.mesh.core.rest.common.ContainerType;
 import com.gentics.mesh.core.rest.error.PermissionException;
 import com.gentics.mesh.graphql.context.GraphQLContext;
 
 import graphql.ExceptionWhileDataFetching;
+import graphql.GraphQLError;
 import graphql.schema.DataFetchingEnvironment;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
@@ -29,8 +32,8 @@ public class GraphQLContextImpl extends InternalRoutingActionContextImpl impleme
 	}
 
 	@Override
-	public <T extends HibCoreElement> T requiresPerm(T element, InternalPermission... permission) {
-		UserDaoWrapper userDao = Tx.get().userDao();
+	public <T extends HibCoreElement<?>> T requiresPerm(T element, InternalPermission... permission) {
+		UserDao userDao = Tx.get().userDao();
 		for (InternalPermission perm : permission) {
 			if (userDao.hasPermission(getUser(), element, perm)) {
 				return element;
@@ -40,49 +43,29 @@ public class GraphQLContextImpl extends InternalRoutingActionContextImpl impleme
 	}
 
 	@Override
-	public boolean hasReadPerm(NodeContent content) {
-		NodeGraphFieldContainer container = content.getContainer();
+	public boolean hasReadPerm(NodeContent content, ContainerType type) {
+		HibNodeFieldContainer container = content.getContainer();
 		if (container != null) {
-			return hasReadPerm(container);
+			return hasReadPerm(container, type);
 		} else {
 			return true;
 		}
 	}
 
-	@Override
-	public boolean hasReadPerm(NodeGraphFieldContainer container) {
+	public boolean hasReadPerm(HibNodeFieldContainer container, ContainerType type) {
 		Tx tx = Tx.get();
-		ContentDaoWrapper contentDao = tx.contentDao();
-		HibNode node = contentDao.getNode(container);
-		Object nodeId = node.getId();
-		UserDaoWrapper userDao = tx.userDao();
-
-		if (userDao.hasPermissionForId(getUser(), nodeId, InternalPermission.READ_PERM)) {
-			return true;
-		}
-
-		boolean isPublished = container.isPublished(tx.getBranch(this).getUuid());
-		if (isPublished && userDao.hasPermissionForId(getUser(), nodeId, InternalPermission.READ_PUBLISHED_PERM)) {
-			return true;
-		}
-		return false;
+		return tx.userDao().hasReadPermission(getUser(), container, tx.getBranch(this).getUuid(), type.getHumanCode());
 	}
 
 	@Override
-	public NodeGraphFieldContainer requiresReadPermSoft(NodeGraphFieldContainer container, DataFetchingEnvironment env) {
-		ContentDaoWrapper contentDao = Tx.get().contentDao();
-		if (container == null) {
-			return null;
-		}
-		if (hasReadPerm(container)) {
-			return container;
+	public Optional<GraphQLError> requiresReadPermSoft(HibNodeFieldContainer container, DataFetchingEnvironment env, ContainerType type) {
+		if (container == null || hasReadPerm(container, type)) {
+			return Optional.empty();
 		} else {
+			ContentDao contentDao = Tx.get().contentDao();
 			PermissionException error = new PermissionException("node", contentDao.getNode(container).getUuid());
-			env.getExecutionContext()
-				.addError(new ExceptionWhileDataFetching(env.getFieldTypeInfo().getPath(), error, env.getField().getSourceLocation()));
+			return Optional.of(new ExceptionWhileDataFetching(env.getExecutionStepInfo().getPath(), error, env.getField().getSourceLocation()));
 		}
-
-		return null;
 	}
 
 	@Override

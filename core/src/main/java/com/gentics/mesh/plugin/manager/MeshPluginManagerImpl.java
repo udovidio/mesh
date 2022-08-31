@@ -9,6 +9,8 @@ import static com.gentics.mesh.core.rest.plugin.PluginStatus.VALIDATED;
 import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
 import static io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR;
 
+import java.io.Closeable;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -28,6 +30,8 @@ import java.util.stream.Collectors;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
+import com.gentics.mesh.core.db.Database;
+import com.gentics.mesh.core.db.cluster.ClusterManager;
 import org.apache.commons.collections4.map.HashedMap;
 import org.pf4j.AbstractPluginManager;
 import org.pf4j.CompoundPluginLoader;
@@ -59,9 +63,6 @@ import com.gentics.mesh.core.rest.error.GenericRestException;
 import com.gentics.mesh.core.rest.plugin.PluginResponse;
 import com.gentics.mesh.core.rest.plugin.PluginStatus;
 import com.gentics.mesh.etc.config.MeshOptions;
-import com.gentics.mesh.graphdb.cluster.ClusterManager;
-import com.gentics.mesh.graphdb.spi.Database;
-import com.gentics.mesh.monitor.liveness.LivenessManager;
 import com.gentics.mesh.plugin.MeshPlugin;
 import com.gentics.mesh.plugin.MeshPluginDescriptor;
 import com.gentics.mesh.plugin.impl.MeshPluginDescriptorFinderImpl;
@@ -105,16 +106,13 @@ public class MeshPluginManagerImpl extends AbstractPluginManager implements Mesh
 
 	private final ClusterManager clusterManager;
 
-	private final LivenessManager liveness;
-
 	@Inject
-	public MeshPluginManagerImpl(MeshOptions options, MeshPluginFactory pluginFactory, DelegatingPluginRegistry pluginRegistry, Database database, Lazy<Vertx> vertx, LivenessManager liveness) {
+	public MeshPluginManagerImpl(MeshOptions options, MeshPluginFactory pluginFactory, DelegatingPluginRegistry pluginRegistry, Database database, Lazy<Vertx> vertx) {
 		this.pluginFactory = pluginFactory;
 		this.options = options;
 		this.pluginRegistry = pluginRegistry;
 		this.vertx = vertx;
 		this.clusterManager = database.clusterManager();
-		this.liveness = liveness;
 		delayedInitialize();
 	}
 
@@ -213,9 +211,11 @@ public class MeshPluginManagerImpl extends AbstractPluginManager implements Mesh
 		for (PluginWrapper pluginWrapper : resolvedPlugins) {
 			PluginState pluginState = pluginWrapper.getPluginState();
 			if ((PluginState.DISABLED != pluginState) && (PluginState.STARTED != pluginState)) {
+				Plugin plugin = null;
+
 				try {
 					log.info("Start plugin '{}'", getPluginLabel(pluginWrapper.getDescriptor()));
-					Plugin plugin = pluginWrapper.getPlugin();
+					plugin = pluginWrapper.getPlugin();
 					plugin.start();
 					// Set state for PF4J
 					pluginWrapper.setPluginState(PluginState.STARTED);
@@ -229,6 +229,13 @@ public class MeshPluginManagerImpl extends AbstractPluginManager implements Mesh
 
 					firePluginStateEvent(new PluginStateEvent(this, pluginWrapper, pluginState));
 				} catch (Throwable e) {
+					if (plugin instanceof MeshPlugin) {
+						setPluginFailed(((MeshPlugin) plugin).id());
+						// We still need to add the plugin to the list of started plugins, or else the monitoring will
+						// not be aware of the failed plugin start.
+						startedPlugins.add(pluginWrapper);
+					}
+
 					log.error("Error while starting plugins " + e.getMessage(), e);
 				}
 			}
@@ -273,7 +280,8 @@ public class MeshPluginManagerImpl extends AbstractPluginManager implements Mesh
 			PluginWrapper plugin = getPlugin(id);
 			if (plugin == null || plugin.getPlugin() == null) {
 				log.error("The plugin {" + path + "/" + id + "} could not be loaded.");
-				plugins.remove(id);
+				removePlugin(id);
+				removePluginClassLoader(id);
 				return rxError(INTERNAL_SERVER_ERROR, "admin_plugin_error_plugin_loading_failed", name);
 			}
 			validate(plugin.getPlugin());
@@ -281,10 +289,12 @@ public class MeshPluginManagerImpl extends AbstractPluginManager implements Mesh
 		} catch (GenericRestException e) {
 			log.error("Post start validation of plugin {" + path + "/" + id + "} failed.", e);
 			removePlugin(id);
+			removePluginClassLoader(id);
 			throw e;
 		} catch (Throwable e) {
 			log.error("Error while loading plugin class", e);
 			removePlugin(id);
+			removePluginClassLoader(id);
 			return rxError(INTERNAL_SERVER_ERROR, "admin_plugin_error_plugin_loading_failed", name);
 		}
 
@@ -348,6 +358,24 @@ public class MeshPluginManagerImpl extends AbstractPluginManager implements Mesh
 		} catch (Throwable e2) {
 			log.error("Error while unloading plugin {" + id + "}", e2);
 			return false;
+		}
+	}
+
+	/**
+	 * Remove the plugin classloader
+	 * @param pluginId plugin ID
+	 */
+	private void removePluginClassLoader(String pluginId) {
+		Map<String, ClassLoader> pluginClassLoaders = getPluginClassLoaders();
+		if (pluginClassLoaders.containsKey(pluginId)) {
+			ClassLoader classLoader = pluginClassLoaders.remove(pluginId);
+			if (classLoader instanceof Closeable) {
+				try {
+					((Closeable) classLoader).close();
+				} catch (IOException e) {
+					throw new PluginRuntimeException(e, "Cannot close classloader");
+				}
+			}
 		}
 	}
 
@@ -540,13 +568,6 @@ public class MeshPluginManagerImpl extends AbstractPluginManager implements Mesh
 	public void setStatus(String id, PluginStatus status) {
 		pluginStatusMap.put(id, status);
 		log.debug("Plugin {} changed to status {}", id , status);
-
-		// if initialization of a plugin failed, the "liveness" is false
-		if (status == PluginStatus.FAILED) {
-			// set liveness to false
-			log.error("Liveness of Mesh instance is set to false, because plugin {} failed to initialize", id);
-			liveness.setLive(false, String.format("Plugin %s failed to initialize", id));
-		}
 	}
 
 	@Override

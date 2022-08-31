@@ -1,21 +1,26 @@
 package com.gentics.mesh.util;
 
+import java.nio.ByteBuffer;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
- * Main source for UUIDs. The UUIDs are shorted in order to better utilize the database indices.
+ * Main source for UUIDs. The UUIDs are shorted in order to better utilize the
+ * database indices.
  */
 public final class UUIDUtil {
 
 	private static Pattern p = Pattern.compile("^[A-Fa-f0-9]+$");
+	private static Pattern shortUuid = Pattern.compile("(\\w{8})(\\w{4})(\\w{4})(\\w{4})(\\w{12})");
+	private static final String WITH_DASHES = "$1-$2-$3-$4-$5";
 
 	private UUIDUtil() {
 
 	}
 
 	/**
-	 * You can run this class to generate a UUID. Useful when needing random uuids for documentation.
+	 * You can run this class to generate a UUID. Useful when needing random uuids
+	 * for documentation.
 	 * 
 	 * @param args
 	 */
@@ -30,7 +35,7 @@ public final class UUIDUtil {
 	 * @return UUID which contains dashes
 	 */
 	public static String toFullUuid(String uuid) {
-		return uuid.replaceAll("(\\w{8})(\\w{4})(\\w{4})(\\w{4})(\\w{12})", "$1-$2-$3-$4-$5");
+		return shortUuid.matcher(uuid).replaceAll(WITH_DASHES);
 	}
 
 	/**
@@ -51,8 +56,8 @@ public final class UUIDUtil {
 	public static String randomUUID() {
 		final UUID uuid = UUID.randomUUID();
 		return (digits(uuid.getMostSignificantBits() >> 32, 8) + digits(uuid.getMostSignificantBits() >> 16, 4)
-			+ digits(uuid.getMostSignificantBits(), 4) + digits(uuid.getLeastSignificantBits() >> 48, 4)
-			+ digits(uuid.getLeastSignificantBits(), 12));
+				+ digits(uuid.getMostSignificantBits(), 4) + digits(uuid.getLeastSignificantBits() >> 48, 4)
+				+ digits(uuid.getLeastSignificantBits(), 12));
 	}
 
 	/**
@@ -70,8 +75,7 @@ public final class UUIDUtil {
 	/**
 	 * Check whether the given text is a uuid.
 	 * 
-	 * @param text
-	 *            String to be checked
+	 * @param text String to be checked
 	 * @return true if the text represents a uuid
 	 */
 	public static boolean isUUID(String text) {
@@ -106,5 +110,31 @@ public final class UUIDUtil {
 			return null;
 		}
 		return toShortUuid(uuid.toString());
+	}
+
+	/**
+	 * Convert a uuid into bytes.
+	 * 
+	 * @param uuid
+	 * @return
+	 */
+	public static byte[] toBytes(UUID uuid) {
+		ByteBuffer bb = ByteBuffer.wrap(new byte[16]);
+		bb.putLong(uuid.getMostSignificantBits());
+		bb.putLong(uuid.getLeastSignificantBits());
+		return bb.array();
+	}
+
+	/**
+	 * Convert byte array into UUID.
+	 * 
+	 * @param bytes
+	 * @return
+	 */
+	public static UUID toJavaUuid(byte[] bytes) {
+		ByteBuffer bb = ByteBuffer.wrap(bytes);
+		long mostSigBits = bb.getLong();
+		long leastSigBits = bb.getLong();
+		return new UUID(mostSigBits, leastSigBits);
 	}
 }

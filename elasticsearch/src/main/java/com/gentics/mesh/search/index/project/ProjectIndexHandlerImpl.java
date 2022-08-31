@@ -2,24 +2,23 @@ package com.gentics.mesh.search.index.project;
 
 import java.util.Collections;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
-import com.gentics.mesh.cli.BootstrapInitializer;
 import com.gentics.mesh.context.InternalActionContext;
-import com.gentics.mesh.core.data.Project;
 import com.gentics.mesh.core.data.project.HibProject;
-import com.gentics.mesh.core.data.search.UpdateDocumentEntry;
 import com.gentics.mesh.core.data.search.index.IndexInfo;
 import com.gentics.mesh.core.data.search.request.SearchRequest;
+import com.gentics.mesh.core.db.Database;
 import com.gentics.mesh.core.db.Tx;
 import com.gentics.mesh.etc.config.MeshOptions;
-import com.gentics.mesh.graphdb.spi.Database;
 import com.gentics.mesh.search.SearchProvider;
 import com.gentics.mesh.search.index.BucketManager;
 import com.gentics.mesh.search.index.entry.AbstractIndexHandler;
@@ -41,9 +40,9 @@ public class ProjectIndexHandlerImpl extends AbstractIndexHandler<HibProject> im
 	ProjectMappingProvider mappingProvider;
 
 	@Inject
-	public ProjectIndexHandlerImpl(SearchProvider searchProvider, Database db, BootstrapInitializer boot, MeshHelper helper, MeshOptions options,
+	public ProjectIndexHandlerImpl(SearchProvider searchProvider, Database db, MeshHelper helper, MeshOptions options,
 		SyncMetersFactory syncMetricsFactory, BucketManager bucketManager) {
-		super(searchProvider, db, boot, helper, options, syncMetricsFactory, bucketManager);
+		super(searchProvider, db, helper, options, syncMetricsFactory, bucketManager);
 	}
 
 	@Override
@@ -52,25 +51,15 @@ public class ProjectIndexHandlerImpl extends AbstractIndexHandler<HibProject> im
 	}
 
 	@Override
-	public Class<Project> getElementClass() {
-		return Project.class;
+	public Class<HibProject> getElementClass() {
+		return HibProject.class;
 	}
 
 	@Override
 	public long getTotalCountFromGraph() {
 		return db.tx(tx -> {
-			return tx.projectDao().globalCount();
+			return tx.projectDao().count();
 		});
-	}
-
-	@Override
-	protected String composeDocumentIdFromEntry(UpdateDocumentEntry entry) {
-		return Project.composeDocumentId(entry.getElementUuid());
-	}
-
-	@Override
-	protected String composeIndexNameFromEntry(UpdateDocumentEntry entry) {
-		return Project.composeIndexName();
 	}
 
 	@Override
@@ -84,26 +73,26 @@ public class ProjectIndexHandlerImpl extends AbstractIndexHandler<HibProject> im
 	}
 
 	@Override
-	public Flowable<SearchRequest> syncIndices() {
-		return diffAndSync(Project.composeIndexName(), null);
+	public Flowable<SearchRequest> syncIndices(Optional<Pattern> indexPattern) {
+		return diffAndSync(HibProject.composeIndexName(), null, indexPattern);
 	}
 
 	@Override
 	public Set<String> filterUnknownIndices(Set<String> indices) {
 		return indices.stream()
 			.filter(i -> i.startsWith(getType()))
-			.filter(i -> !i.equals(Project.composeIndexName()))
+			.filter(i -> !i.equals(HibProject.composeIndexName()))
 			.collect(Collectors.toSet());
 	}
 
 	@Override
 	public Set<String> getIndicesForSearch(InternalActionContext ac) {
-		return Collections.singleton(Project.composeIndexName());
+		return Collections.singleton(HibProject.composeIndexName());
 	}
 
 	@Override
 	public Function<String, HibProject> elementLoader() {
-		return (uuid) -> boot.meshRoot().getProjectRoot().findByUuid(uuid);
+		return (uuid) -> Tx.get().projectDao().findByUuid(uuid);
 	}
 
 	@Override
@@ -113,7 +102,7 @@ public class ProjectIndexHandlerImpl extends AbstractIndexHandler<HibProject> im
 
 	@Override
 	public Map<String, IndexInfo> getIndices() {
-		String indexName = Project.composeIndexName();
+		String indexName = HibProject.composeIndexName();
 		IndexInfo info = new IndexInfo(indexName, null, getMappingProvider().getMapping(), "project");
 		return Collections.singletonMap(indexName, info);
 	}

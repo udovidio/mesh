@@ -2,23 +2,22 @@ package com.gentics.mesh.search.index.schema;
 
 import java.util.Collections;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
-import com.gentics.mesh.cli.BootstrapInitializer;
 import com.gentics.mesh.context.InternalActionContext;
 import com.gentics.mesh.core.data.schema.HibSchema;
-import com.gentics.mesh.core.data.schema.Schema;
-import com.gentics.mesh.core.data.search.UpdateDocumentEntry;
 import com.gentics.mesh.core.data.search.index.IndexInfo;
 import com.gentics.mesh.core.data.search.request.SearchRequest;
+import com.gentics.mesh.core.db.Database;
 import com.gentics.mesh.core.db.Tx;
 import com.gentics.mesh.etc.config.MeshOptions;
-import com.gentics.mesh.graphdb.spi.Database;
 import com.gentics.mesh.search.SearchProvider;
 import com.gentics.mesh.search.index.BucketManager;
 import com.gentics.mesh.search.index.MappingProvider;
@@ -41,9 +40,9 @@ public class SchemaContainerIndexHandlerImpl extends AbstractIndexHandler<HibSch
 	SchemaMappingProvider mappingProvider;
 
 	@Inject
-	public SchemaContainerIndexHandlerImpl(SearchProvider searchProvider, Database db, BootstrapInitializer boot, MeshHelper helper, MeshOptions options,
+	public SchemaContainerIndexHandlerImpl(SearchProvider searchProvider, Database db, MeshHelper helper, MeshOptions options,
 		SyncMetersFactory syncMetricsFactory, BucketManager bucketManager) {
-		super(searchProvider, db, boot, helper, options, syncMetricsFactory, bucketManager);
+		super(searchProvider, db, helper, options, syncMetricsFactory, bucketManager);
 	}
 
 	@Override
@@ -52,24 +51,14 @@ public class SchemaContainerIndexHandlerImpl extends AbstractIndexHandler<HibSch
 	}
 
 	@Override
-	protected String composeDocumentIdFromEntry(UpdateDocumentEntry entry) {
-		return Schema.composeDocumentId(entry.getElementUuid());
-	}
-
-	@Override
-	protected String composeIndexNameFromEntry(UpdateDocumentEntry entry) {
-		return Schema.composeIndexName();
-	}
-
-	@Override
-	public Class<Schema> getElementClass() {
-		return Schema.class;
+	public Class<HibSchema> getElementClass() {
+		return HibSchema.class;
 	}
 
 	@Override
 	public long getTotalCountFromGraph() {
 		return db.tx(tx -> {
-			return tx.schemaDao().globalCount();
+			return tx.schemaDao().count();
 		});
 	}
 
@@ -84,30 +73,30 @@ public class SchemaContainerIndexHandlerImpl extends AbstractIndexHandler<HibSch
 	}
 
 	@Override
-	public Flowable<SearchRequest> syncIndices() {
-		return diffAndSync(Schema.composeIndexName(), null);
+	public Flowable<SearchRequest> syncIndices(Optional<Pattern> indexPattern) {
+		return diffAndSync(HibSchema.composeIndexName(), null, indexPattern);
 	}
 
 	@Override
 	public Set<String> filterUnknownIndices(Set<String> indices) {
-		return filterIndicesByType(indices, Schema.composeIndexName());
+		return filterIndicesByType(indices, HibSchema.composeIndexName());
 	}
 
 	@Override
 	public Set<String> getIndicesForSearch(InternalActionContext ac) {
-		return Collections.singleton(Schema.composeIndexName());
+		return Collections.singleton(HibSchema.composeIndexName());
 	}
 
 	@Override
 	public Map<String, IndexInfo> getIndices() {
-		String indexName = Schema.composeIndexName();
+		String indexName = HibSchema.composeIndexName();
 		IndexInfo info = new IndexInfo(indexName, null, getMappingProvider().getMapping(), "schema");
 		return Collections.singletonMap(indexName, info);
 	}
 
 	@Override
 	public Function<String, HibSchema> elementLoader() {
-		return (uuid) -> boot.meshRoot().getSchemaContainerRoot().findByUuid(uuid);
+		return (uuid) -> Tx.get().schemaDao().findByUuid(uuid);
 	}
 
 	@Override
