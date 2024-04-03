@@ -29,7 +29,7 @@
 
 		<!-- Jacoco -->
 		<jacoco.skip.merge>true</jacoco.skip.merge>
-		<jacoco.version>0.8.4</jacoco.version>
+		<jacoco.version>0.8.12</jacoco.version>
 		<jacoco.skip>true</jacoco.skip>
 		<jacoco.env></jacoco.env>
 
