@@ -27,7 +27,7 @@
 		<elasticsearch.client.version>1.1.1</elasticsearch.client.version>
 		<orientdb.version>3.1.18</orientdb.version>
 		<hazelcast.version>3.12.8</hazelcast.version>
-		<jackson.version>2.13.2</jackson.version>
+		<jackson.version>2.18.2</jackson.version>
 		<jackson-databind.version>2.13.2</jackson-databind.version>
 		<netty.version>4.1.72.Final</netty.version>
 		<tika.version>1.26</tika.version>
